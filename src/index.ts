@@ -4,6 +4,8 @@ export { updateTodo } from "./writer.js";
 export { startMcpServer } from "./mcp.js";
 export { startWatcher, matchesGlob } from "./watcher.js";
 export { parseCron, matchesCron, nextFireMs } from "./cron.js";
+export { appendRun, queryRuns, getLastFailure, getLastRun } from "./log.js";
+export { sendMessage, listMessages } from "./messages.js";
 export type {
   Contract,
   Status,
@@ -15,6 +17,10 @@ export type {
   ScheduleTrigger,
   WatchTrigger,
   WebhookTrigger,
+  TriggerSource,
+  RunRecord,
+  AgentMessage,
+  MessageKind,
   McpJsonRpcRequest,
   McpJsonRpcResponse,
   McpToolDefinition,

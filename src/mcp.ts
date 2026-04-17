@@ -18,6 +18,8 @@ import { createInterface } from "node:readline";
 import { parseTodo } from "./parser.js";
 import { runContract } from "./verifier.js";
 import { updateTodo } from "./writer.js";
+import { queryRuns, getLastFailure } from "./log.js";
+import { sendMessage, listMessages } from "./messages.js";
 import type {
   McpJsonRpcRequest,
   McpJsonRpcResponse,
@@ -123,6 +125,83 @@ const TOOLS: McpToolDefinition[] = [
         },
       },
       required: ["contract_id"],
+    },
+  },
+  {
+    name: "get_run_history",
+    description:
+      "Return the run history for all contracts or a specific contract from the durable log.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        contract_id: {
+          type: "string",
+          description: "Filter by contract id. Omit for all contracts.",
+        },
+        failed_only: {
+          type: "boolean",
+          description: "If true, return only failed runs.",
+        },
+        limit: {
+          type: "number",
+          description: "Max records to return (default 20).",
+        },
+        path: {
+          type: "string",
+          description: "Path to todo.md. Defaults to ./todo.md.",
+        },
+      },
+    },
+  },
+  {
+    name: "get_last_failure",
+    description:
+      "Return the most recent failed run record for a contract. Useful for understanding why a contract keeps failing.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        contract_id: {
+          type: "string",
+          description: "The contract id (slug).",
+        },
+        path: {
+          type: "string",
+          description: "Path to todo.md. Defaults to ./todo.md.",
+        },
+      },
+      required: ["contract_id"],
+    },
+  },
+  {
+    name: "send_message",
+    description:
+      "Send a typed message to another agent. Messages are persisted in .greenlight/messages.ndjson.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        from: { type: "string", description: "Sender agent id." },
+        to: { type: "string", description: "Recipient agent id or '*' for broadcast." },
+        kind: { type: "string", description: "Message kind: completion | blocker | review_request | status_update | retry_request" },
+        payload: { type: "string", description: "JSON string payload." },
+        contract_id: { type: "string", description: "Optional contract this message relates to." },
+        correlation_id: { type: "string", description: "Optional id to link related messages." },
+        path: { type: "string", description: "Path to todo.md. Defaults to ./todo.md." },
+      },
+      required: ["from", "to", "kind"],
+    },
+  },
+  {
+    name: "list_messages",
+    description:
+      "List agent messages from the durable log, optionally filtered by recipient or kind.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        to: { type: "string", description: "Filter by recipient agent id." },
+        kind: { type: "string", description: "Filter by message kind." },
+        limit: { type: "number", description: "Max messages to return (default 20)." },
+        path: { type: "string", description: "Path to todo.md. Defaults to ./todo.md." },
+      },
     },
   },
 ];
@@ -327,6 +406,66 @@ async function handleGetRetryContext(params: Params, serverCwd: string): Promise
   };
 }
 
+async function handleGetRunHistory(params: Params, serverCwd: string): Promise<unknown> {
+  const todoPath = resolveTodoPath(params["path"], serverCwd);
+  const contractId = typeof params["contract_id"] === "string" ? params["contract_id"] : undefined;
+  const failedOnly = params["failed_only"] === true;
+  const limit = typeof params["limit"] === "number" ? params["limit"] : 20;
+
+  const records = queryRuns(todoPath, {
+    contractId,
+    passed: failedOnly ? false : undefined,
+    limit,
+  });
+
+  return { count: records.length, records };
+}
+
+async function handleGetLastFailure(params: Params, serverCwd: string): Promise<unknown> {
+  const contractId = params["contract_id"];
+  if (typeof contractId !== "string" || !contractId.trim()) {
+    return { error: "contract_id is required" };
+  }
+  const todoPath = resolveTodoPath(params["path"], serverCwd);
+  const record = getLastFailure(todoPath, contractId.trim());
+  return record ?? { error: `no failure records found for: ${contractId}` };
+}
+
+async function handleSendMessage(params: Params, serverCwd: string): Promise<unknown> {
+  const { from, to, kind, contract_id, correlation_id } = params as Record<string, string>;
+  if (!from || !to || !kind) {
+    return { error: "from, to, and kind are required" };
+  }
+  const todoPath = resolveTodoPath(params["path"], serverCwd);
+  let payload: unknown = null;
+  if (typeof params["payload"] === "string") {
+    try { payload = JSON.parse(params["payload"]); }
+    catch { payload = params["payload"]; }
+  }
+  const msg = sendMessage(todoPath, {
+    from, to,
+    kind: kind as Parameters<typeof sendMessage>[1]["kind"],
+    payload,
+    contractId: contract_id,
+    correlationId: correlation_id,
+  });
+  return msg;
+}
+
+async function handleListMessages(params: Params, serverCwd: string): Promise<unknown> {
+  const todoPath = resolveTodoPath(params["path"], serverCwd);
+  const to = typeof params["to"] === "string" ? params["to"] : undefined;
+  const kind = typeof params["kind"] === "string" ? params["kind"] : undefined;
+  const limit = typeof params["limit"] === "number" ? params["limit"] : 20;
+
+  const messages = listMessages(todoPath, {
+    to,
+    kind: kind as import("./types.js").MessageKind | undefined,
+    limit,
+  });
+  return { count: messages.length, messages };
+}
+
 // ---------------------------------------------------------------------------
 // JSON-RPC dispatch
 // ---------------------------------------------------------------------------
@@ -390,6 +529,18 @@ async function dispatch(req: McpJsonRpcRequest, serverCwd: string): Promise<void
         break;
       case "get_retry_context":
         result = await handleGetRetryContext(toolParams, serverCwd);
+        break;
+      case "get_run_history":
+        result = await handleGetRunHistory(toolParams, serverCwd);
+        break;
+      case "get_last_failure":
+        result = await handleGetLastFailure(toolParams, serverCwd);
+        break;
+      case "send_message":
+        result = await handleSendMessage(toolParams, serverCwd);
+        break;
+      case "list_messages":
+        result = await handleListMessages(toolParams, serverCwd);
         break;
       default:
         error(id, -32601, `unknown tool: ${toolName}`);

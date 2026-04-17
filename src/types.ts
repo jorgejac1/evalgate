@@ -75,6 +75,51 @@ export interface RunResult {
 }
 
 // ---------------------------------------------------------------------------
+// Durable event log types (v0.4)
+// ---------------------------------------------------------------------------
+
+export type TriggerSource =
+  | "manual"
+  | "schedule"
+  | "watch"
+  | "webhook"
+  | "mcp"
+  | "retry";
+
+/** A single persisted run entry written to .greenlight/runs.ndjson */
+export interface RunRecord {
+  id: string;
+  ts: string;              // ISO 8601
+  contractId: string;
+  contractTitle: string;
+  trigger: TriggerSource;
+  passed: boolean;
+  exitCode: number;
+  durationMs: number;
+  stdout: string;
+  stderr: string;
+}
+
+export type MessageKind =
+  | "completion"
+  | "blocker"
+  | "review_request"
+  | "status_update"
+  | "retry_request";
+
+/** A typed envelope for agent-to-agent communication stored in .greenlight/messages.ndjson */
+export interface AgentMessage {
+  id: string;
+  ts: string;              // ISO 8601
+  from: string;            // agent id or "greenlight"
+  to: string;              // agent id or "*" for broadcast
+  kind: MessageKind;
+  contractId?: string;
+  payload: unknown;
+  correlationId?: string;  // links request → response chains
+}
+
+// ---------------------------------------------------------------------------
 // MCP protocol types (v0.2)
 // ---------------------------------------------------------------------------
 

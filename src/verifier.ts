@@ -1,5 +1,6 @@
 import { spawn } from "node:child_process";
-import type { Contract, RunResult, ShellVerifier } from "./types.js";
+import type { Contract, RunResult, ShellVerifier, TriggerSource } from "./types.js";
+import { appendRun } from "./log.js";
 
 interface ShellOutcome {
   stdout: string;
@@ -63,7 +64,8 @@ export async function runShell(
 
 export async function runContract(
   contract: Contract,
-  cwd: string
+  cwd: string,
+  opts?: { todoPath?: string; trigger?: TriggerSource }
 ): Promise<RunResult> {
   if (!contract.verifier) {
     return {
@@ -88,7 +90,7 @@ export async function runContract(
   }
 
   const r = await runShell(contract.verifier, cwd);
-  return {
+  const result: RunResult = {
     contract,
     passed: r.exitCode === 0 && !r.timedOut,
     stdout: r.stdout,
@@ -96,4 +98,11 @@ export async function runContract(
     exitCode: r.exitCode,
     durationMs: r.durationMs,
   };
+
+  // Write to durable log if a todoPath was provided
+  if (opts?.todoPath) {
+    appendRun(result, opts.todoPath, opts.trigger ?? "manual");
+  }
+
+  return result;
 }

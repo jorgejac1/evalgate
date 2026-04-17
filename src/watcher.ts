@@ -27,6 +27,12 @@ export interface WatcherOptions {
   enableSchedule?: boolean;
   enableWatch?: boolean;
   enableWebhook?: boolean;
+  /**
+   * Root directory for resolving watch globs. Defaults to process.cwd() so
+   * globs like "src/auth/**" are relative to where greenlight is invoked,
+   * not to the todo.md location.
+   */
+  watchRoot?: string;
   onFire?: (contract: Contract, result: RunResult) => void;
   onError?: (err: Error) => void;
 }
@@ -51,11 +57,13 @@ export function startWatcher(opts: WatcherOptions): WatcherHandle {
     enableSchedule = true,
     enableWatch = true,
     enableWebhook = true,
+    watchRoot = process.cwd(),
     onFire,
     onError,
   } = opts;
 
   const cwd = resolve(dirname(todoPath));
+  const resolvedWatchRoot = resolve(watchRoot);
   const schedules: ActiveSchedule[] = [];
   let webhookServer: ReturnType<typeof createServer> | null = null;
   let fsWatcher: ReturnType<typeof fsWatch> | null = null;
@@ -103,7 +111,10 @@ export function startWatcher(opts: WatcherOptions): WatcherHandle {
     }
 
     log(`▸ firing '${contract.title}' (${trigger.kind})`);
-    const result = await runContract(contract, cwd);
+    const result = await runContract(contract, cwd, {
+      todoPath,
+      trigger: trigger.kind,
+    });
 
     const updated = updateTodo(source, [result]);
     if (updated !== source) writeFileSync(todoPath, updated);
@@ -167,7 +178,7 @@ export function startWatcher(opts: WatcherOptions): WatcherHandle {
     const watchers = contracts.filter((c) => c.trigger?.kind === "watch");
     if (watchers.length === 0) return;
 
-    log(`watch engine: ${watchers.length} contract(s) watching ${cwd}`);
+    log(`watch engine: ${watchers.length} contract(s) watching ${resolvedWatchRoot}`);
 
     // Debounce per-contract to avoid duplicate fires on rapid saves
     const debounce = new Map<string, ReturnType<typeof setTimeout>>();
@@ -175,11 +186,19 @@ export function startWatcher(opts: WatcherOptions): WatcherHandle {
     function onFileChange(filename: string | null): void {
       if (!filename) return;
 
+      // fs.watch returns paths relative to the watched directory.
+      // Reconstruct the full path then make it relative to watchRoot so
+      // globs like "examples/basic/**" work when invoked from the project root.
+      const fullPath = resolve(resolvedWatchRoot, filename);
+      const relPath = fullPath.startsWith(resolvedWatchRoot + "/")
+        ? fullPath.slice(resolvedWatchRoot.length + 1)
+        : filename;
+
       for (const contract of watchers) {
         if (contract.trigger?.kind !== "watch") continue;
         const glob = contract.trigger.glob;
 
-        if (matchesGlob(filename, glob)) {
+        if (matchesGlob(relPath, glob)) {
           const existing = debounce.get(contract.id);
           if (existing) clearTimeout(existing);
           debounce.set(
@@ -194,7 +213,7 @@ export function startWatcher(opts: WatcherOptions): WatcherHandle {
     }
 
     try {
-      fsWatcher = fsWatch(cwd, { recursive: true }, (_event, filename) => {
+      fsWatcher = fsWatch(resolvedWatchRoot, { recursive: true }, (_event, filename) => {
         onFileChange(filename);
       });
       fsWatcher.on("error", handleError);
