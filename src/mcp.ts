@@ -21,6 +21,7 @@ import { updateTodo } from "./writer.js";
 import { queryRuns, getLastFailure } from "./log.js";
 import { sendMessage, listMessages } from "./messages.js";
 import { reportTokenUsage, getTotalTokens, getBudgetSummary } from "./budget.js";
+import { suggest, detectPatterns, exportSnapshot } from "./memory.js";
 import type {
   McpJsonRpcRequest,
   McpJsonRpcResponse,
@@ -209,6 +210,42 @@ const TOOLS: McpToolDefinition[] = [
     name: "get_provider_hints",
     description:
       "Return provider routing hints for all contracts: preferred model (opus/sonnet/haiku), role (coordinator/worker/linter), allowed MCP servers, and budget. Orchestrators use this to route the right model to each task.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        path: { type: "string", description: "Path to todo.md. Defaults to ./todo.md." },
+      },
+    },
+  },
+  {
+    name: "suggest_template",
+    description:
+      "Given a task title, find the most similar past successful completions using trigram similarity. Returns ranked suggestions with verifier commands to reuse as templates.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        query: { type: "string", description: "Task title to find similar completions for." },
+        limit: { type: "number", description: "Max suggestions to return (default 5)." },
+        path: { type: "string", description: "Path to todo.md. Defaults to ./todo.md." },
+      },
+      required: ["query"],
+    },
+  },
+  {
+    name: "get_patterns",
+    description:
+      "Analyze run history for systemic failure patterns: contracts with high failure rates, flaky contracts, and common error messages.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        path: { type: "string", description: "Path to todo.md. Defaults to ./todo.md." },
+      },
+    },
+  },
+  {
+    name: "export_state",
+    description:
+      "Export the full project state as a JSON snapshot: contracts, run history, budget, messages, and failure patterns.",
     inputSchema: {
       type: "object",
       properties: {
@@ -478,6 +515,28 @@ async function handleSendMessage(params: Params, serverCwd: string): Promise<unk
   return msg;
 }
 
+async function handleSuggestTemplate(params: Params, serverCwd: string): Promise<unknown> {
+  const query = params["query"];
+  if (typeof query !== "string" || !query.trim()) {
+    return { error: "query is required" };
+  }
+  const todoPath = resolveTodoPath(params["path"], serverCwd);
+  const limit = typeof params["limit"] === "number" ? params["limit"] : 5;
+  const results = suggest(todoPath, query.trim(), limit);
+  return { query, count: results.length, suggestions: results };
+}
+
+async function handleGetPatterns(params: Params, serverCwd: string): Promise<unknown> {
+  const todoPath = resolveTodoPath(params["path"], serverCwd);
+  const patterns = detectPatterns(todoPath);
+  return { count: patterns.length, patterns };
+}
+
+async function handleExportState(params: Params, serverCwd: string): Promise<unknown> {
+  const todoPath = resolveTodoPath(params["path"], serverCwd);
+  return exportSnapshot(todoPath);
+}
+
 async function handleGetProviderHints(params: Params, serverCwd: string): Promise<unknown> {
   const todoPath = resolveTodoPath(params["path"], serverCwd);
   const loaded = loadContracts(todoPath);
@@ -627,6 +686,15 @@ async function dispatch(req: McpJsonRpcRequest, serverCwd: string): Promise<void
         break;
       case "report_token_usage":
         result = await handleReportTokenUsage(toolParams, serverCwd);
+        break;
+      case "suggest_template":
+        result = await handleSuggestTemplate(toolParams, serverCwd);
+        break;
+      case "get_patterns":
+        result = await handleGetPatterns(toolParams, serverCwd);
+        break;
+      case "export_state":
+        result = await handleExportState(toolParams, serverCwd);
         break;
       default:
         error(id, -32601, `unknown tool: ${toolName}`);

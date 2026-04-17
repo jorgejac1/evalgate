@@ -14,8 +14,13 @@ export {
   getTotalTokens,
   getBudgetSummary,
 } from "./budget.js";
+export {
+  suggest,
+  detectPatterns,
+  exportSnapshot,
+  snapshotToMarkdown,
+} from "./memory.js";
 export type {
-  BudgetRecord,
   Contract,
   Status,
   Verifier,
@@ -30,9 +35,15 @@ export type {
   RunRecord,
   AgentMessage,
   MessageKind,
+  BudgetRecord,
   McpJsonRpcRequest,
   McpJsonRpcResponse,
   McpToolDefinition,
   McpServerInfo,
   McpCapabilities,
 } from "./types.js";
+export type {
+  SuggestResult,
+  FailurePattern,
+  ProjectSnapshot,
+} from "./memory.js";

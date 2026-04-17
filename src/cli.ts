@@ -9,6 +9,7 @@ import { startWatcher } from "./watcher.js";
 import { queryRuns, getLastFailure } from "./log.js";
 import { sendMessage, listMessages } from "./messages.js";
 import { reportTokenUsage, getBudgetSummary, getTotalTokens } from "./budget.js";
+import { suggest, detectPatterns, exportSnapshot, snapshotToMarkdown } from "./memory.js";
 import type { RunResult } from "./types.js";
 
 const COLOR = process.stdout.isTTY && !process.env.NO_COLOR;
@@ -318,6 +319,98 @@ async function cmdBudget(todoPath: string, args: string[]): Promise<number> {
   return 0;
 }
 
+async function cmdSuggest(query: string, todoPath: string): Promise<number> {
+  if (!query) {
+    console.error(`${C.red}greenlight suggest: query required${C.reset}`);
+    console.error(`  usage: greenlight suggest "<title>" [path]`);
+    return 1;
+  }
+  if (!existsSync(todoPath)) {
+    console.error(`${C.red}greenlight: file not found: ${todoPath}${C.reset}`);
+    return 1;
+  }
+
+  const results = suggest(todoPath, query, 5);
+
+  if (results.length === 0) {
+    console.log(`${C.dim}no similar past completions found${C.reset}`);
+    return 0;
+  }
+
+  console.log(
+    `${C.bold}greenlight suggest${C.reset} ${C.dim}·${C.reset} "${query}"\n`
+  );
+
+  for (const r of results) {
+    const sim = Math.round(r.similarity * 100);
+    const simColor = sim >= 60 ? C.green : sim >= 30 ? C.yellow : C.dim;
+    console.log(
+      `  ${simColor}${sim}%${C.reset} ${C.bold}${r.contractTitle}${C.reset} ${C.dim}(${r.contractId})${C.reset}`
+    );
+    if (r.verifier) {
+      console.log(`       ${C.dim}eval:${C.reset} ${C.cyan}${r.verifier}${C.reset}`);
+    }
+    console.log(
+      `       ${C.dim}pass rate: ${Math.round(r.passRate * 100)}% · ${r.runCount} run(s)${C.reset}`
+    );
+  }
+  return 0;
+}
+
+async function cmdPatterns(todoPath: string): Promise<number> {
+  if (!existsSync(todoPath)) {
+    console.error(`${C.red}greenlight: file not found: ${todoPath}${C.reset}`);
+    return 1;
+  }
+
+  const patterns = detectPatterns(todoPath);
+
+  if (patterns.length === 0) {
+    console.log(`${C.dim}no failure patterns detected${C.reset}`);
+    return 0;
+  }
+
+  console.log(
+    `${C.bold}greenlight patterns${C.reset} ${C.dim}· ${basename(todoPath)}${C.reset}\n`
+  );
+
+  for (const p of patterns) {
+    const flakyTag = p.flaky ? ` ${C.yellow}(flaky)${C.reset}` : "";
+    console.log(
+      `  ${C.bold}${p.contractTitle}${C.reset}${flakyTag} ${C.dim}(${p.contractId})${C.reset}`
+    );
+    const rate = Math.round(p.failureRate * 100);
+    const rateColor = rate >= 75 ? C.red : rate >= 40 ? C.yellow : C.dim;
+    console.log(
+      `  ${C.dim}runs: ${p.totalRuns} · failures: ${C.reset}${rateColor}${p.failures}${C.reset}` +
+      ` ${C.dim}· passes: ${p.passes} · rate: ${C.reset}${rateColor}${rate}%${C.reset}`
+    );
+    if (p.topErrors.length > 0) {
+      for (const e of p.topErrors) {
+        console.log(`  ${C.dim}│${C.reset} ${C.dim}${e}${C.reset}`);
+      }
+    }
+    console.log();
+  }
+  return 0;
+}
+
+async function cmdExport(todoPath: string, format: "json" | "md"): Promise<number> {
+  if (!existsSync(todoPath)) {
+    console.error(`${C.red}greenlight: file not found: ${todoPath}${C.reset}`);
+    return 1;
+  }
+
+  const snapshot = exportSnapshot(todoPath);
+
+  if (format === "md") {
+    process.stdout.write(snapshotToMarkdown(snapshot) + "\n");
+  } else {
+    process.stdout.write(JSON.stringify(snapshot, null, 2) + "\n");
+  }
+  return 0;
+}
+
 function buildBar(used: number, budget: number, width: number): string {
   const pct = Math.min(1, used / budget);
   const filled = Math.round(pct * width);
@@ -395,6 +488,9 @@ ${C.bold}USAGE${C.reset}
   greenlight dash   [path]              Live ANSI terminal dashboard
   greenlight budget [path]              Show per-contract token spend vs budget
   greenlight budget <id> <tokens> [path]  Record token usage for a contract
+  greenlight suggest "<title>" [path]   Find similar past successful completions
+  greenlight patterns [path]            Show failure patterns from run history
+  greenlight export [path] [--format=json|md]  Export full project snapshot
   greenlight help                       Show this message
 
 ${C.bold}CONTRACT FORMAT${C.reset} (todo.md)
@@ -545,6 +641,28 @@ async function main(): Promise<void> {
       process.on("SIGINT", () => { handle.stop(); process.exit(0); });
       process.on("SIGTERM", () => { handle.stop(); process.exit(0); });
       return;
+    }
+    case "suggest": {
+      const positional = args.filter((a) => !a.startsWith("--"));
+      const query = positional[0] ?? "";
+      const todoPath = resolve(positional[1] ?? "todo.md");
+      exitCode = await cmdSuggest(query, todoPath);
+      break;
+    }
+    case "patterns": {
+      const positional = args.filter((a) => !a.startsWith("--"));
+      const todoPath = resolve(positional[0] ?? "todo.md");
+      exitCode = await cmdPatterns(todoPath);
+      break;
+    }
+    case "export": {
+      const flags = args.filter((a) => a.startsWith("--"));
+      const positional = args.filter((a) => !a.startsWith("--"));
+      const todoPath = resolve(positional[0] ?? "todo.md");
+      const formatArg = flags.find((a) => a.startsWith("--format="))?.split("=")[1];
+      const format = formatArg === "md" ? "md" : "json";
+      exitCode = await cmdExport(todoPath, format);
+      break;
     }
     case "help":
     case "--help":
