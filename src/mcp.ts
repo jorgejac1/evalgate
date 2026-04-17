@@ -320,7 +320,7 @@ async function handleRunEval(params: Params, serverCwd: string): Promise<unknown
   }
 
   const cwd = resolve(dirname(todoPath));
-  const result = await runContract(contract, cwd);
+  const result = await runContract(contract, cwd, { todoPath, trigger: "mcp" });
 
   // Flip the checkbox if it passed
   if (result.passed) {
@@ -346,7 +346,7 @@ async function handleCheckAll(params: Params, serverCwd: string): Promise<unknow
   const cwd = resolve(dirname(todoPath));
   const results: RunResult[] = [];
   for (const contract of pending) {
-    results.push(await runContract(contract, cwd));
+    results.push(await runContract(contract, cwd, { todoPath, trigger: "mcp" }));
   }
 
   const updated = updateTodo(loaded.source, results);
@@ -382,7 +382,7 @@ async function handleGetRetryContext(params: Params, serverCwd: string): Promise
   }
 
   const cwd = resolve(dirname(todoPath));
-  const result = await runContract(contract, cwd);
+  const result = await runContract(contract, cwd, { todoPath, trigger: "retry" });
 
   if (result.passed) {
     return {

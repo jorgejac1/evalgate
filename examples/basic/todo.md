@@ -14,3 +14,15 @@ verifier passes.
   - eval: `npm run test:subtract --silent`
   - retries: 3
   - budget: 30k
+
+- [x] Watch trigger test
+  - eval: `echo "file changed!" && exit 0`
+  - on: watch: "examples/basic/**"
+
+- [x] Webhook trigger test
+  - eval: `echo "webhook fired!" && exit 0`
+  - on: webhook: "/deploy-done"
+
+- [x] Schedule trigger test
+  - eval: `echo "cron fired!"`
+  - on: schedule: "* * * * *"

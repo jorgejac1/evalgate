@@ -61,7 +61,7 @@ async function cmdCheck(todoPath: string): Promise<number> {
     process.stdout.write(
       `  ${C.dim}▸${C.reset} ${c.title} ${C.dim}(${c.id})${C.reset} ... `
     );
-    const result = await runContract(c, cwd);
+    const result = await runContract(c, cwd, { todoPath, trigger: "manual" });
     results.push(result);
 
     if (result.passed) {
@@ -353,8 +353,9 @@ async function main(): Promise<void> {
       const positional = rest.filter((a) => !a.startsWith("--"));
       const todoPath = (subCmd === "list"
         ? positional[0]
-        : positional[3]) ?? "todo.md";
-      const msgArgs = subCmd === "list" ? flags : [...positional.slice(0, 3), ...flags];
+        : positional[4]) ?? "todo.md";
+      // send: from to kind payload — pass all 4 positional args
+      const msgArgs = subCmd === "list" ? flags : [...positional.slice(0, 4), ...flags];
       exitCode = await cmdMsg(subCmd ?? "", msgArgs, todoPath);
       break;
     }
