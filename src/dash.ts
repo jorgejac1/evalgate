@@ -1,5 +1,5 @@
 /**
- * greenlight terminal dashboard — v0.5
+ * evalgate terminal dashboard — v0.5
  *
  * ANSI-based live dashboard. Clears and redraws the terminal every 2 seconds
  * (or immediately when a new run is appended via the onRun hook).
@@ -62,7 +62,7 @@ function render(todoPath: string): void {
 	push(
 		C.bold +
 			C.cyan +
-			"greenlight" +
+			"evalgate" +
 			C.reset +
 			C.dim +
 			" · " +
@@ -186,7 +186,7 @@ export function startDash(todoPath: string): DashHandle {
 	const resolved = resolve(todoPath);
 
 	if (!process.stdout.isTTY) {
-		console.error("greenlight dash: requires an interactive terminal (TTY)");
+		console.error("evalgate dash: requires an interactive terminal (TTY)");
 		process.exit(1);
 	}
 

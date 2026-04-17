@@ -52,9 +52,7 @@ export async function runShell(v: ShellVerifier, cwd: string): Promise<ShellOutc
 			clearTimeout(sigkillTimer);
 			resolve({
 				stdout,
-				stderr: timedOut
-					? `${stderr}\n[greenlight] verifier timed out after ${timeoutMs}ms`
-					: stderr,
+				stderr: timedOut ? `${stderr}\n[evalgate] verifier timed out after ${timeoutMs}ms` : stderr,
 				exitCode: code ?? -1,
 				durationMs: Date.now() - start,
 				timedOut,

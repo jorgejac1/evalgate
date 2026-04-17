@@ -1,10 +1,10 @@
 {
-  "name": "greenlight",
+  "name": "evalgate",
   "version": "0.8.0",
   "description": "Eval-gated todos for agentic coding. Your agents can't tick the checkbox until the verifier passes.",
   "type": "module",
   "bin": {
-    "greenlight": "dist/cli.js"
+    "evalgate": "dist/cli.js"
   },
   "main": "dist/index.js",
   "types": "dist/index.d.ts",

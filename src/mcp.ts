@@ -1,5 +1,5 @@
 /**
- * greenlight MCP server — v0.2
+ * evalgate MCP server — v0.2
  *
  * Implements the Model Context Protocol over stdio (JSON-RPC 2.0).
  * Zero runtime dependencies: reads stdin line-by-line, writes to stdout.
@@ -176,7 +176,7 @@ const TOOLS: McpToolDefinition[] = [
 	{
 		name: "send_message",
 		description:
-			"Send a typed message to another agent. Messages are persisted in .greenlight/messages.ndjson.",
+			"Send a typed message to another agent. Messages are persisted in .evalgate/messages.ndjson.",
 		inputSchema: {
 			type: "object",
 			properties: {
@@ -259,7 +259,7 @@ const TOOLS: McpToolDefinition[] = [
 	{
 		name: "report_token_usage",
 		description:
-			"Report how many tokens were consumed working on a contract. Greenlight persists this in .greenlight/budget.ndjson and emits a budget_exceeded message if the contract's budget is breached.",
+			"Report how many tokens were consumed working on a contract. Greenlight persists this in .evalgate/budget.ndjson and emits a budget_exceeded message if the contract's budget is breached.",
 		inputSchema: {
 			type: "object",
 			properties: {
@@ -657,7 +657,7 @@ async function dispatch(req: McpJsonRpcRequest, serverCwd: string): Promise<void
 			id,
 			result: {
 				protocolVersion: "2024-11-05",
-				serverInfo: { name: "greenlight", version: "0.2.0" },
+				serverInfo: { name: "evalgate", version: "0.2.0" },
 				capabilities: { tools: {} },
 			},
 		});
@@ -749,7 +749,7 @@ async function dispatch(req: McpJsonRpcRequest, serverCwd: string): Promise<void
 // ---------------------------------------------------------------------------
 
 export function startMcpServer(serverCwd: string = process.cwd()): void {
-	process.stderr.write(`[greenlight] MCP server started (cwd: ${serverCwd})\n`);
+	process.stderr.write(`[evalgate] MCP server started (cwd: ${serverCwd})\n`);
 
 	const rl = createInterface({ input: process.stdin, terminal: false });
 
@@ -767,13 +767,13 @@ export function startMcpServer(serverCwd: string = process.cwd()): void {
 
 		dispatch(req, serverCwd).catch((err: unknown) => {
 			const msg = err instanceof Error ? err.message : String(err);
-			process.stderr.write(`[greenlight] dispatch error: ${msg}\n`);
+			process.stderr.write(`[evalgate] dispatch error: ${msg}\n`);
 			send({ jsonrpc: "2.0", id: req.id ?? null, error: { code: -32603, message: msg } });
 		});
 	});
 
 	rl.on("close", () => {
-		process.stderr.write("[greenlight] stdin closed, exiting\n");
+		process.stderr.write("[evalgate] stdin closed, exiting\n");
 		process.exit(0);
 	});
 }

@@ -1,7 +1,7 @@
 /**
- * greenlight agent message bus — v0.4
+ * evalgate agent message bus — v0.4
  *
- * Append-only NDJSON log at .greenlight/messages.ndjson.
+ * Append-only NDJSON log at .evalgate/messages.ndjson.
  * One AgentMessage per line. Agents append to send; agents read to receive.
  * No delivery guarantees — this is a shared log, not a queue.
  * Zero runtime dependencies.

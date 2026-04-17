@@ -1,5 +1,5 @@
 /**
- * greenlight web UI server — v0.5
+ * evalgate web UI server — v0.5
  *
  * Serves a single-page dashboard over node:http. Zero runtime deps.
  *

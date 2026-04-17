@@ -1,5 +1,5 @@
 /**
- * greenlight web UI — v0.5
+ * evalgate web UI — v0.5
  *
  * Returns a self-contained HTML string. No external deps, no CDN calls.
  * Inline CSS (dark theme) + vanilla JS SSE client.
@@ -11,7 +11,7 @@ export function htmlDashboard(): string {
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>greenlight</title>
+<title>evalgate</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 body{background:#0d1117;color:#e6edf3;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:13px;line-height:1.5}
@@ -119,7 +119,7 @@ body.light .empty{color:#6e7781}
 <body>
 <header>
   <span id="dot" class="err"></span>
-  <h1>greenlight</h1>
+  <h1>evalgate</h1>
   <span id="status">connecting…</span>
   <span id="file-label"></span>
   <button id="theme-btn" onclick="toggleTheme()" title="Toggle theme">&#9788;</button>

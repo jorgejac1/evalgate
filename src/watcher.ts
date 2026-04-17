@@ -1,5 +1,5 @@
 /**
- * greenlight watcher daemon — v0.3
+ * evalgate watcher daemon — v0.3
  *
  * Runs three trigger engines simultaneously:
  *   - Schedule engine: fires contracts on cron expressions
@@ -29,7 +29,7 @@ export interface WatcherOptions {
 	enableWebhook?: boolean;
 	/**
 	 * Root directory for resolving watch globs. Defaults to process.cwd() so
-	 * globs like "src/auth/**" are relative to where greenlight is invoked,
+	 * globs like "src/auth/**" are relative to where evalgate is invoked,
 	 * not to the todo.md location.
 	 */
 	watchRoot?: string;
@@ -70,7 +70,7 @@ export function startWatcher(opts: WatcherOptions): WatcherHandle {
 	let stopped = false;
 
 	function log(msg: string): void {
-		process.stderr.write(`[greenlight] ${msg}\n`);
+		process.stderr.write(`[evalgate] ${msg}\n`);
 	}
 
 	function handleError(err: Error): void {

@@ -1,7 +1,7 @@
 /**
- * greenlight budget tracking — v0.6
+ * evalgate budget tracking — v0.6
  *
- * Append-only NDJSON log at .greenlight/budget.ndjson.
+ * Append-only NDJSON log at .evalgate/budget.ndjson.
  * Agents report token usage via reportTokenUsage(). When cumulative spend
  * exceeds a contract's budget, a budget_exceeded message is sent automatically.
  * Zero runtime dependencies.
@@ -52,7 +52,7 @@ export function reportTokenUsage(
 		const total = getTotalTokens(todoPath, contractId);
 		if (total > contract.budget) {
 			sendMessage(todoPath, {
-				from: "greenlight",
+				from: "evalgate",
 				to: "*",
 				kind: "budget_exceeded",
 				contractId,

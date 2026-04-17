@@ -1,7 +1,7 @@
 /**
- * greenlight run log — v0.4
+ * evalgate run log — v0.4
  *
- * Append-only NDJSON log at .greenlight/runs.ndjson.
+ * Append-only NDJSON log at .evalgate/runs.ndjson.
  * One RunRecord per line. Crash-safe: partial writes leave prior records intact.
  * Zero runtime dependencies.
  */
@@ -31,7 +31,7 @@ export function onRun(listener: RunListener): () => void {
 // ---------------------------------------------------------------------------
 
 export function logDir(todoPath: string): string {
-	return join(resolve(dirname(todoPath)), ".greenlight");
+	return join(resolve(dirname(todoPath)), ".evalgate");
 }
 
 export function runsPath(todoPath: string): string {

@@ -110,7 +110,7 @@ describe("MCP server — protocol handshake", () => {
 			]);
 			assert.ok(resp.result, "expected result");
 			const result = resp.result as Record<string, unknown>;
-			assert.equal((result.serverInfo as Record<string, unknown>).name, "greenlight");
+			assert.equal((result.serverInfo as Record<string, unknown>).name, "evalgate");
 			assert.ok(result.capabilities);
 		} finally {
 			cleanup(dir);

@@ -35,7 +35,7 @@ export interface Contract {
 // Budget tracking types (v0.6)
 // ---------------------------------------------------------------------------
 
-/** A single token usage report, appended to .greenlight/budget.ndjson */
+/** A single token usage report, appended to .evalgate/budget.ndjson */
 export interface BudgetRecord {
 	id: string;
 	ts: string; // ISO 8601
@@ -108,7 +108,7 @@ export interface RunResult {
 
 export type TriggerSource = "manual" | "schedule" | "watch" | "webhook" | "mcp" | "retry";
 
-/** A single persisted run entry written to .greenlight/runs.ndjson */
+/** A single persisted run entry written to .evalgate/runs.ndjson */
 export interface RunRecord {
 	id: string;
 	ts: string; // ISO 8601
@@ -130,11 +130,11 @@ export type MessageKind =
 	| "retry_request"
 	| "budget_exceeded";
 
-/** A typed envelope for agent-to-agent communication stored in .greenlight/messages.ndjson */
+/** A typed envelope for agent-to-agent communication stored in .evalgate/messages.ndjson */
 export interface AgentMessage {
 	id: string;
 	ts: string; // ISO 8601
-	from: string; // agent id or "greenlight"
+	from: string; // agent id or "evalgate"
 	to: string; // agent id or "*" for broadcast
 	kind: MessageKind;
 	contractId?: string;

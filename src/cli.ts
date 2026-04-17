@@ -44,7 +44,7 @@ function looksLikeFailure(s: string): boolean {
 
 async function cmdCheck(todoPath: string): Promise<number> {
 	if (!existsSync(todoPath)) {
-		console.error(`${C.red}greenlight: file not found: ${todoPath}${C.reset}`);
+		console.error(`${C.red}evalgate: file not found: ${todoPath}${C.reset}`);
 		return 1;
 	}
 
@@ -54,13 +54,13 @@ async function cmdCheck(todoPath: string): Promise<number> {
 
 	if (pending.length === 0) {
 		console.log(
-			`${C.dim}greenlight: no pending contracts with verifiers in ${basename(todoPath)}${C.reset}`,
+			`${C.dim}evalgate: no pending contracts with verifiers in ${basename(todoPath)}${C.reset}`,
 		);
 		return 0;
 	}
 
 	console.log(
-		`${C.bold}greenlight${C.reset} ${C.dim}·${C.reset} checking ${pending.length} contract${pending.length === 1 ? "" : "s"} ${C.dim}in ${basename(todoPath)}${C.reset}\n`,
+		`${C.bold}evalgate${C.reset} ${C.dim}·${C.reset} checking ${pending.length} contract${pending.length === 1 ? "" : "s"} ${C.dim}in ${basename(todoPath)}${C.reset}\n`,
 	);
 
 	const cwd = resolve(dirname(todoPath));
@@ -107,7 +107,7 @@ async function cmdCheck(todoPath: string): Promise<number> {
 
 async function cmdList(todoPath: string): Promise<number> {
 	if (!existsSync(todoPath)) {
-		console.error(`${C.red}greenlight: file not found: ${todoPath}${C.reset}`);
+		console.error(`${C.red}evalgate: file not found: ${todoPath}${C.reset}`);
 		return 1;
 	}
 
@@ -140,12 +140,12 @@ async function cmdList(todoPath: string): Promise<number> {
 
 async function cmdRetry(contractId: string, todoPath: string): Promise<number> {
 	if (!contractId) {
-		console.error(`${C.red}greenlight retry: contract id required${C.reset}`);
-		console.error(`  usage: greenlight retry <id> [path]`);
+		console.error(`${C.red}evalgate retry: contract id required${C.reset}`);
+		console.error(`  usage: evalgate retry <id> [path]`);
 		return 1;
 	}
 	if (!existsSync(todoPath)) {
-		console.error(`${C.red}greenlight: file not found: ${todoPath}${C.reset}`);
+		console.error(`${C.red}evalgate: file not found: ${todoPath}${C.reset}`);
 		return 1;
 	}
 
@@ -157,7 +157,7 @@ async function cmdRetry(contractId: string, todoPath: string): Promise<number> {
 	);
 
 	if (!contract) {
-		console.error(`${C.red}greenlight: contract not found: ${contractId}${C.reset}`);
+		console.error(`${C.red}evalgate: contract not found: ${contractId}${C.reset}`);
 		console.log(`\nAvailable ids:`);
 		for (const c of contracts) {
 			console.log(`  ${C.dim}${c.id}${C.reset} — ${c.title}`);
@@ -166,12 +166,12 @@ async function cmdRetry(contractId: string, todoPath: string): Promise<number> {
 	}
 
 	if (!contract.verifier) {
-		console.error(`${C.red}greenlight: contract '${contractId}' has no verifier${C.reset}`);
+		console.error(`${C.red}evalgate: contract '${contractId}' has no verifier${C.reset}`);
 		return 1;
 	}
 
 	console.log(
-		`${C.bold}greenlight retry${C.reset} ${C.dim}·${C.reset} ${contract.title} ${C.dim}(${contract.id})${C.reset}\n`,
+		`${C.bold}evalgate retry${C.reset} ${C.dim}·${C.reset} ${contract.title} ${C.dim}(${contract.id})${C.reset}\n`,
 	);
 
 	// Show last failure from durable log if available
@@ -214,7 +214,7 @@ async function cmdRetry(contractId: string, todoPath: string): Promise<number> {
 
 async function cmdLog(todoPath: string, args: string[]): Promise<number> {
 	if (!existsSync(todoPath)) {
-		console.error(`${C.red}greenlight: file not found: ${todoPath}${C.reset}`);
+		console.error(`${C.red}evalgate: file not found: ${todoPath}${C.reset}`);
 		return 1;
 	}
 
@@ -234,7 +234,7 @@ async function cmdLog(todoPath: string, args: string[]): Promise<number> {
 		return 0;
 	}
 
-	console.log(`${C.bold}greenlight log${C.reset} ${C.dim}· ${records.length} run(s)${C.reset}\n`);
+	console.log(`${C.bold}evalgate log${C.reset} ${C.dim}· ${records.length} run(s)${C.reset}\n`);
 	for (const r of records) {
 		const status = r.passed ? `${C.green}✓ passed${C.reset}` : `${C.red}✗ failed${C.reset}`;
 		const ts = new Date(r.ts).toLocaleString();
@@ -250,27 +250,27 @@ async function cmdLog(todoPath: string, args: string[]): Promise<number> {
 
 async function cmdBudget(todoPath: string, args: string[]): Promise<number> {
 	if (!existsSync(todoPath)) {
-		console.error(`${C.red}greenlight: file not found: ${todoPath}${C.reset}`);
+		console.error(`${C.red}evalgate: file not found: ${todoPath}${C.reset}`);
 		return 1;
 	}
 
 	const source = readFileSync(todoPath, "utf8");
 	const contracts = parseTodo(source);
 
-	// Sub-command: greenlight budget <id> <tokens> — record usage
+	// Sub-command: evalgate budget <id> <tokens> — record usage
 	const positional = args.filter((a) => !a.startsWith("--"));
 	if (positional.length >= 2) {
 		const [contractId, tokensRaw] = positional;
 		const tokens = parseInt(tokensRaw, 10);
 		if (Number.isNaN(tokens) || tokens < 0) {
-			console.error(`${C.red}greenlight budget: tokens must be a non-negative integer${C.reset}`);
+			console.error(`${C.red}evalgate budget: tokens must be a non-negative integer${C.reset}`);
 			return 1;
 		}
 		const contract = contracts.find(
 			(c) => c.id === contractId || c.title.toLowerCase() === contractId.toLowerCase(),
 		);
 		if (!contract) {
-			console.error(`${C.red}greenlight: contract not found: ${contractId}${C.reset}`);
+			console.error(`${C.red}evalgate: contract not found: ${contractId}${C.reset}`);
 			return 1;
 		}
 		const record = reportTokenUsage(todoPath, contract.id, tokens, contract);
@@ -293,11 +293,11 @@ async function cmdBudget(todoPath: string, args: string[]): Promise<number> {
 	const anyBudget = summary.some((s) => s.budget !== undefined || s.used > 0);
 
 	if (!anyBudget) {
-		console.log(`${C.dim}no budget data yet — use: greenlight budget <id> <tokens>${C.reset}`);
+		console.log(`${C.dim}no budget data yet — use: evalgate budget <id> <tokens>${C.reset}`);
 		return 0;
 	}
 
-	console.log(`${C.bold}greenlight budget${C.reset} ${C.dim}· ${basename(todoPath)}${C.reset}\n`);
+	console.log(`${C.bold}evalgate budget${C.reset} ${C.dim}· ${basename(todoPath)}${C.reset}\n`);
 
 	for (const s of summary) {
 		if (s.budget === undefined && s.used === 0) continue;
@@ -324,12 +324,12 @@ async function cmdBudget(todoPath: string, args: string[]): Promise<number> {
 
 async function cmdSuggest(query: string, todoPath: string): Promise<number> {
 	if (!query) {
-		console.error(`${C.red}greenlight suggest: query required${C.reset}`);
-		console.error(`  usage: greenlight suggest "<title>" [path]`);
+		console.error(`${C.red}evalgate suggest: query required${C.reset}`);
+		console.error(`  usage: evalgate suggest "<title>" [path]`);
 		return 1;
 	}
 	if (!existsSync(todoPath)) {
-		console.error(`${C.red}greenlight: file not found: ${todoPath}${C.reset}`);
+		console.error(`${C.red}evalgate: file not found: ${todoPath}${C.reset}`);
 		return 1;
 	}
 
@@ -340,7 +340,7 @@ async function cmdSuggest(query: string, todoPath: string): Promise<number> {
 		return 0;
 	}
 
-	console.log(`${C.bold}greenlight suggest${C.reset} ${C.dim}·${C.reset} "${query}"\n`);
+	console.log(`${C.bold}evalgate suggest${C.reset} ${C.dim}·${C.reset} "${query}"\n`);
 
 	for (const r of results) {
 		const sim = Math.round(r.similarity * 100);
@@ -360,7 +360,7 @@ async function cmdSuggest(query: string, todoPath: string): Promise<number> {
 
 async function cmdPatterns(todoPath: string): Promise<number> {
 	if (!existsSync(todoPath)) {
-		console.error(`${C.red}greenlight: file not found: ${todoPath}${C.reset}`);
+		console.error(`${C.red}evalgate: file not found: ${todoPath}${C.reset}`);
 		return 1;
 	}
 
@@ -371,7 +371,7 @@ async function cmdPatterns(todoPath: string): Promise<number> {
 		return 0;
 	}
 
-	console.log(`${C.bold}greenlight patterns${C.reset} ${C.dim}· ${basename(todoPath)}${C.reset}\n`);
+	console.log(`${C.bold}evalgate patterns${C.reset} ${C.dim}· ${basename(todoPath)}${C.reset}\n`);
 
 	for (const p of patterns) {
 		const flakyTag = p.flaky ? ` ${C.yellow}(flaky)${C.reset}` : "";
@@ -400,11 +400,11 @@ async function cmdDiff(
 	format: "json" | "md" | "text",
 ): Promise<number> {
 	if (!existsSync(pathA)) {
-		console.error(`${C.red}greenlight diff: file not found: ${pathA}${C.reset}`);
+		console.error(`${C.red}evalgate diff: file not found: ${pathA}${C.reset}`);
 		return 1;
 	}
 	if (!existsSync(pathB)) {
-		console.error(`${C.red}greenlight diff: file not found: ${pathB}${C.reset}`);
+		console.error(`${C.red}evalgate diff: file not found: ${pathB}${C.reset}`);
 		return 1;
 	}
 
@@ -414,13 +414,13 @@ async function cmdDiff(
 	try {
 		snapshotA = JSON.parse(readFileSync(pathA, "utf8")) as ReturnType<typeof exportSnapshot>;
 	} catch {
-		console.error(`${C.red}greenlight diff: failed to parse ${pathA}${C.reset}`);
+		console.error(`${C.red}evalgate diff: failed to parse ${pathA}${C.reset}`);
 		return 1;
 	}
 	try {
 		snapshotB = JSON.parse(readFileSync(pathB, "utf8")) as ReturnType<typeof exportSnapshot>;
 	} catch {
-		console.error(`${C.red}greenlight diff: failed to parse ${pathB}${C.reset}`);
+		console.error(`${C.red}evalgate diff: failed to parse ${pathB}${C.reset}`);
 		return 1;
 	}
 
@@ -439,7 +439,7 @@ async function cmdDiff(
 	// Default text output
 	const { contracts, runs, budget, messages } = diff;
 	console.log(
-		`${C.bold}greenlight diff${C.reset} ${C.dim}·${C.reset} ` +
+		`${C.bold}evalgate diff${C.reset} ${C.dim}·${C.reset} ` +
 			`${new Date(diff.from).toLocaleString()} ${C.dim}→${C.reset} ${new Date(diff.to).toLocaleString()}\n`,
 	);
 
@@ -479,7 +479,7 @@ async function cmdDiff(
 
 async function cmdExport(todoPath: string, format: "json" | "md"): Promise<number> {
 	if (!existsSync(todoPath)) {
-		console.error(`${C.red}greenlight: file not found: ${todoPath}${C.reset}`);
+		console.error(`${C.red}evalgate: file not found: ${todoPath}${C.reset}`);
 		return 1;
 	}
 
@@ -505,9 +505,7 @@ async function cmdMsg(subCmd: string, args: string[], todoPath: string): Promise
 	if (subCmd === "send") {
 		const [from, to, kind, payloadRaw] = args;
 		if (!from || !to || !kind) {
-			console.error(
-				`${C.red}usage: greenlight msg send <from> <to> <kind> [payload-json]${C.reset}`,
-			);
+			console.error(`${C.red}usage: evalgate msg send <from> <to> <kind> [payload-json]${C.reset}`);
 			return 1;
 		}
 		let payload: unknown = null;
@@ -553,33 +551,33 @@ async function cmdMsg(subCmd: string, args: string[], todoPath: string): Promise
 	}
 
 	console.error(`${C.red}unknown msg subcommand: ${subCmd}${C.reset}`);
-	console.error(`  usage: greenlight msg send|list ...`);
+	console.error(`  usage: evalgate msg send|list ...`);
 	return 1;
 }
 
 function usage(): void {
 	console.log(
 		`
-${C.bold}greenlight${C.reset} — eval-gated todos for agents
+${C.bold}evalgate${C.reset} — eval-gated todos for agents
 
 ${C.bold}USAGE${C.reset}
-  greenlight check  [path]              Run verifiers on pending contracts
-  greenlight list   [path]              List contracts and their status
-  greenlight retry  <id> [path]         Rerun a contract with last failure context
-  greenlight log    [path] [--contract=<id>] [--failed] [--limit=N]
-  greenlight msg    send <from> <to> <kind> [payload-json] [path]
-  greenlight msg    list [--to=<agent>] [--kind=<kind>] [path]
-  greenlight serve  [cwd]               Start MCP server on stdio
-  greenlight watch  [path]              Start trigger daemon (schedule/watch/webhook)
-  greenlight ui     [path] [--port=N]   Start web dashboard (default port 7777)
-  greenlight dash   [path]              Live ANSI terminal dashboard
-  greenlight budget [path]              Show per-contract token spend vs budget
-  greenlight budget <id> <tokens> [path]  Record token usage for a contract
-  greenlight suggest "<title>" [path]   Find similar past successful completions
-  greenlight patterns [path]            Show failure patterns from run history
-  greenlight export [path] [--format=json|md]  Export full project snapshot
-  greenlight diff <a.json> <b.json> [--format=text|json|md]  Diff two snapshots
-  greenlight help                       Show this message
+  evalgate check  [path]              Run verifiers on pending contracts
+  evalgate list   [path]              List contracts and their status
+  evalgate retry  <id> [path]         Rerun a contract with last failure context
+  evalgate log    [path] [--contract=<id>] [--failed] [--limit=N]
+  evalgate msg    send <from> <to> <kind> [payload-json] [path]
+  evalgate msg    list [--to=<agent>] [--kind=<kind>] [path]
+  evalgate serve  [cwd]               Start MCP server on stdio
+  evalgate watch  [path]              Start trigger daemon (schedule/watch/webhook)
+  evalgate ui     [path] [--port=N]   Start web dashboard (default port 7777)
+  evalgate dash   [path]              Live ANSI terminal dashboard
+  evalgate budget [path]              Show per-contract token spend vs budget
+  evalgate budget <id> <tokens> [path]  Record token usage for a contract
+  evalgate suggest "<title>" [path]   Find similar past successful completions
+  evalgate patterns [path]            Show failure patterns from run history
+  evalgate export [path] [--format=json|md]  Export full project snapshot
+  evalgate diff <a.json> <b.json> [--format=text|json|md]  Diff two snapshots
+  evalgate help                       Show this message
 
 ${C.bold}CONTRACT FORMAT${C.reset} (todo.md)
   - [ ] Refactor auth middleware to use JWT
@@ -645,7 +643,7 @@ async function main(): Promise<void> {
 			const noWebhook = args.includes("--no-webhook");
 
 			if (!existsSync(todoPath)) {
-				console.error(`${C.red}greenlight: file not found: ${todoPath}${C.reset}`);
+				console.error(`${C.red}evalgate: file not found: ${todoPath}${C.reset}`);
 				process.exit(1);
 			}
 
@@ -700,7 +698,7 @@ async function main(): Promise<void> {
 			const port = portArg ? parseInt(portArg.split("=")[1], 10) : 7777;
 
 			if (!existsSync(todoPath)) {
-				console.error(`${C.red}greenlight: file not found: ${todoPath}${C.reset}`);
+				console.error(`${C.red}evalgate: file not found: ${todoPath}${C.reset}`);
 				process.exit(1);
 			}
 
@@ -708,7 +706,7 @@ async function main(): Promise<void> {
 			const handle = startUiServer({ todoPath, port });
 
 			console.log(
-				`${C.bold}greenlight ui${C.reset} ${C.dim}·${C.reset} ` +
+				`${C.bold}evalgate ui${C.reset} ${C.dim}·${C.reset} ` +
 					`${C.cyan}http://localhost:${handle.port}${C.reset} ` +
 					`${C.dim}· ${todoPath}${C.reset}`,
 			);
@@ -729,7 +727,7 @@ async function main(): Promise<void> {
 			const todoPath = resolve(positional[0] ?? "todo.md");
 
 			if (!existsSync(todoPath)) {
-				console.error(`${C.red}greenlight: file not found: ${todoPath}${C.reset}`);
+				console.error(`${C.red}evalgate: file not found: ${todoPath}${C.reset}`);
 				process.exit(1);
 			}
 
@@ -773,8 +771,8 @@ async function main(): Promise<void> {
 			const positional = args.filter((a) => !a.startsWith("--"));
 			const [pathA, pathB] = positional;
 			if (!pathA || !pathB) {
-				console.error(`${C.red}greenlight diff: two snapshot paths required${C.reset}`);
-				console.error(`  usage: greenlight diff <a.json> <b.json> [--format=text|json|md]`);
+				console.error(`${C.red}evalgate diff: two snapshot paths required${C.reset}`);
+				console.error(`  usage: evalgate diff <a.json> <b.json> [--format=text|json|md]`);
 				exitCode = 1;
 				break;
 			}
@@ -798,6 +796,6 @@ async function main(): Promise<void> {
 }
 
 main().catch((e) => {
-	console.error(`${C.red}greenlight error:${C.reset}`, e?.stack ?? e);
+	console.error(`${C.red}evalgate error:${C.reset}`, e?.stack ?? e);
 	process.exit(1);
 });

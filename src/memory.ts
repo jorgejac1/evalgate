@@ -1,5 +1,5 @@
 /**
- * greenlight memory + learning layer — v0.7
+ * evalgate memory + learning layer — v0.7
  *
  * Three capabilities, zero runtime dependencies:
  *   suggest()       — trigram similarity over past successful completions
@@ -322,7 +322,7 @@ export function diffToMarkdown(diff: SnapshotDiff): string {
 		lines.push(s);
 	};
 
-	push(`# greenlight diff`);
+	push(`# evalgate diff`);
 	push(`> ${new Date(diff.from).toLocaleString()} → ${new Date(diff.to).toLocaleString()}`);
 	push();
 
@@ -380,7 +380,7 @@ export function snapshotToMarkdown(snap: ProjectSnapshot): string {
 		lines.push(s);
 	};
 
-	push(`# greenlight sprint report`);
+	push(`# evalgate sprint report`);
 	push(`> Exported ${new Date(snap.exportedAt).toLocaleString()} · ${snap.todoPath}`);
 	push();
 

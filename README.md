@@ -1,4 +1,4 @@
-# greenlight
+# evalgate
 
 > **Eval-gated todos for agentic coding.**
 > Your agents can't tick the checkbox until the verifier passes.
@@ -15,7 +15,7 @@ has solved is that **more agents means more plausible-looking output that's actu
 wrong.** The completion signal today is "the agent said it was done," which scales
 terribly.
 
-`greenlight` fixes that with one primitive: **a todo item can't be flipped to `[x]`
+`evalgate` fixes that with one primitive: **a todo item can't be flipped to `[x]`
 until its attached verifier exits `0`.**
 
 Zero runtime dependencies. Plain markdown. Plugs into any agent or CI pipeline.
@@ -36,10 +36,10 @@ Your `todo.md`:
   - retries: 3
 ```
 
-Run `greenlight check`:
+Run `evalgate check`:
 
 ```
-greenlight · checking 2 contracts in todo.md
+evalgate · checking 2 contracts in todo.md
 
   ▸ Implement add(a, b) (implement-add) ... ✓ passed (412ms)
   ▸ Implement subtract(a, b) (implement-subtract) ... ✗ failed (exit 1, 388ms)
@@ -57,7 +57,7 @@ there for the agent to read and retry.
 
 ## Why this matters
 
-Today's agent orchestrators give you more workers. `greenlight` gives those workers
+Today's agent orchestrators give you more workers. `evalgate` gives those workers
 a **contract**: each todo is a unit of work with a built-in quality gate. That unlocks:
 
 - **Auto-retries with context.** The agent sees the verifier output and fixes the root
@@ -65,7 +65,7 @@ a **contract**: each todo is a unit of work with a built-in quality gate. That u
 - **Honest progress bars.** `[x]` means the tests actually passed.
 - **Safe parallelism.** Spawn 8 workers on 8 todos; only the ones that actually work
   commit their checkboxes.
-- **Budget enforcement per task.** Each contract declares its token budget; `greenlight`
+- **Budget enforcement per task.** Each contract declares its token budget; `evalgate`
   tracks spend and can report overruns.
 - **24/7 autonomous operation.** Trigger contracts on a schedule, file change, or
   webhook — no human needed to kick things off.
@@ -76,11 +76,11 @@ a **contract**: each todo is a unit of work with a built-in quality gate. That u
 
 ```bash
 # Global CLI
-npm install -g greenlight
+npm install -g evalgate
 
 # Or clone + link for development
 git clone https://github.com/jorgejac1/greenlight
-cd greenlight
+cd greenlight  # repo folder name unchanged
 pnpm install && pnpm build && npm link
 ```
 
@@ -89,8 +89,8 @@ pnpm install && pnpm build && npm link
 ```bash
 cd examples/basic
 npm install
-greenlight list          # show contracts + verifiers
-greenlight check         # run pending verifiers, flip checkboxes
+evalgate list          # show contracts + verifiers
+evalgate check         # run pending verifiers, flip checkboxes
 ```
 
 ---
@@ -177,22 +177,22 @@ Requires `ANTHROPIC_API_KEY`. Defaults to `claude-haiku-4-5-20251001`.
 
 | Command | Description |
 | ------- | ----------- |
-| `greenlight check [path]` | Run verifiers on all pending contracts. |
-| `greenlight list [path]` | List all contracts with status and verifier. |
-| `greenlight retry <id> [path]` | Rerun a single contract, injecting last failure as context. |
-| `greenlight log [path]` | Show run history. Flags: `--contract=<id>`, `--failed`, `--limit=N`. |
-| `greenlight msg send <from> <to> <kind> [payload-json] [path]` | Send a structured message between agents. |
-| `greenlight msg list [path]` | List messages. Flags: `--to=<agent>`, `--kind=<kind>`. |
-| `greenlight serve [cwd]` | Start the MCP server on stdio. |
-| `greenlight watch [path]` | Start the trigger daemon (schedule / watch / webhook). |
-| `greenlight ui [path] [--port=N]` | Launch web dashboard at `localhost:7777`. |
-| `greenlight dash [path]` | ANSI terminal dashboard — live contract status. |
-| `greenlight budget [path]` | Show token spend vs budget per contract. |
-| `greenlight budget <id> <tokens> [path]` | Record token usage for a contract. |
-| `greenlight suggest "<title>" [path]` | Find similar past completions for a new contract. |
-| `greenlight patterns [path]` | Analyse failure patterns across all contracts. |
-| `greenlight export [path] [--format=json\|md]` | Export full project snapshot. |
-| `greenlight diff <snap1.json> <snap2.json> [--format=text\|json\|md]` | Compare two snapshots — show what changed between exports. |
+| `evalgate check [path]` | Run verifiers on all pending contracts. |
+| `evalgate list [path]` | List all contracts with status and verifier. |
+| `evalgate retry <id> [path]` | Rerun a single contract, injecting last failure as context. |
+| `evalgate log [path]` | Show run history. Flags: `--contract=<id>`, `--failed`, `--limit=N`. |
+| `evalgate msg send <from> <to> <kind> [payload-json] [path]` | Send a structured message between agents. |
+| `evalgate msg list [path]` | List messages. Flags: `--to=<agent>`, `--kind=<kind>`. |
+| `evalgate serve [cwd]` | Start the MCP server on stdio. |
+| `evalgate watch [path]` | Start the trigger daemon (schedule / watch / webhook). |
+| `evalgate ui [path] [--port=N]` | Launch web dashboard at `localhost:7777`. |
+| `evalgate dash [path]` | ANSI terminal dashboard — live contract status. |
+| `evalgate budget [path]` | Show token spend vs budget per contract. |
+| `evalgate budget <id> <tokens> [path]` | Record token usage for a contract. |
+| `evalgate suggest "<title>" [path]` | Find similar past completions for a new contract. |
+| `evalgate patterns [path]` | Analyse failure patterns across all contracts. |
+| `evalgate export [path] [--format=json\|md]` | Export full project snapshot. |
+| `evalgate diff <snap1.json> <snap2.json> [--format=text\|json\|md]` | Compare two snapshots — show what changed between exports. |
 
 ---
 
@@ -222,7 +222,7 @@ Add to `~/.claude/settings.json` (or `.claude/settings.json` in your repo):
 }
 ```
 
-Now whenever Claude Code edits `todo.md`, `greenlight check` runs automatically.
+Now whenever Claude Code edits `todo.md`, `evalgate check` runs automatically.
 If a verifier fails, the hook exits `2` and Claude Code feeds the failure output
 back into the agent's next turn.
 
@@ -230,7 +230,7 @@ back into the agent's next turn.
 
 ## MCP integration
 
-`greenlight serve` exposes 15 tools over stdio MCP. Any MCP client (Claude Desktop,
+`evalgate serve` exposes 15 tools over stdio MCP. Any MCP client (Claude Desktop,
 Cursor, Windsurf) can invoke contracts as tools without touching the CLI.
 
 ### Add to Claude Desktop
@@ -240,8 +240,8 @@ In `~/Library/Application Support/Claude/claude_desktop_config.json`:
 ```json
 {
   "mcpServers": {
-    "greenlight": {
-      "command": "greenlight",
+    "evalgate": {
+      "command": "evalgate",
       "args": ["serve", "/path/to/your/project"]
     }
   }
@@ -272,7 +272,7 @@ In `~/Library/Application Support/Claude/claude_desktop_config.json`:
 
 ## Triggers
 
-Start the trigger daemon with `greenlight watch`. It handles three trigger kinds:
+Start the trigger daemon with `evalgate watch`. It handles three trigger kinds:
 
 **Schedule** — cron expression, runs the contract verifier at the specified interval:
 ```markdown
@@ -301,15 +301,15 @@ The webhook server listens on `localhost:7778` by default.
 
 ## Agent messaging
 
-Agents in a multi-worker setup can exchange structured messages through greenlight's
-message bus. Messages persist to `.greenlight/messages.ndjson`.
+Agents in a multi-worker setup can exchange structured messages through evalgate's
+message bus. Messages persist to `.evalgate/messages.ndjson`.
 
 ```bash
 # Coordinator tells worker-2 the schema is ready
-greenlight msg send coordinator worker-2 schema_ready '{"table":"users"}'
+evalgate msg send coordinator worker-2 schema_ready '{"table":"users"}'
 
 # Worker lists its inbox
-greenlight msg list --to=worker-2
+evalgate msg list --to=worker-2
 
 # Or via MCP
 send_message({ from: "coordinator", to: "worker-2", kind: "schema_ready", payload: {...} })
@@ -323,7 +323,7 @@ tracing request/response pairs across turns.
 
 ## Budget tracking
 
-Declare a token budget on any contract. Workers report their spend; greenlight tracks
+Declare a token budget on any contract. Workers report their spend; evalgate tracks
 cumulative usage and warns on overrun.
 
 ```markdown
@@ -335,10 +335,10 @@ cumulative usage and warns on overrun.
 
 ```bash
 # Worker reports spend after its turn
-greenlight budget gen-migration 12400
+evalgate budget gen-migration 12400
 
 # See all contracts vs budget
-greenlight budget
+evalgate budget
 #   gen-migration   12,400 / 50,000   24%
 #   auth-refactor   61,200 / 50,000   122%  ⚠ over budget
 ```
@@ -351,13 +351,13 @@ The `report_token_usage` MCP tool lets agents self-report without shelling out.
 
 ```bash
 # Browser dashboard at localhost:7777
-greenlight ui
+evalgate ui
 
 # Custom port
-greenlight ui --port=8080
+evalgate ui --port=8080
 
 # ANSI live dashboard in the terminal
-greenlight dash
+evalgate dash
 ```
 
 The web UI shows live contract status, run history, failure output, and budget gauges.
@@ -368,17 +368,17 @@ leaving the terminal.
 
 ## Memory and learning
 
-greenlight indexes successful contract completions so future contracts can get a
+evalgate indexes successful contract completions so future contracts can get a
 head start:
 
 ```bash
 # Find templates similar to a new task
-greenlight suggest "migrate users table to Postgres"
+evalgate suggest "migrate users table to Postgres"
 #   85% match: migrate_products_table — passed in 1 attempt
 #   72% match: migrate_orders_table   — passed in 2 attempts, retries=3
 
 # See failure patterns across all contracts
-greenlight patterns
+evalgate patterns
 #   Most common failure: exit 1 in test:subtract — 8 occurrences
 #   Fastest to fix after failure: lint contracts — avg 1.2 retries
 ```
@@ -390,10 +390,10 @@ directly, so they can self-tune without human intervention.
 
 ## Persistence
 
-All state lives in `.greenlight/` at the project root:
+All state lives in `.evalgate/` at the project root:
 
 ```
-.greenlight/
+.evalgate/
   runs.ndjson       — full run history (contract id, exit code, output, duration)
   messages.ndjson   — agent message log
   budget.ndjson     — token spend per contract
@@ -406,7 +406,7 @@ NDJSON format — human-readable, grep-friendly, no database required.
 ## Programmatic API
 
 ```ts
-import { parseTodo, runContract, updateTodo } from "greenlight";
+import { parseTodo, runContract, updateTodo } from "evalgate";
 import { readFileSync, writeFileSync } from "node:fs";
 
 const src = readFileSync("todo.md", "utf8");
@@ -424,21 +424,21 @@ Full export surface:
 
 ```ts
 // Core
-import { parseTodo, runContract, runShell, updateTodo } from "greenlight";
+import { parseTodo, runContract, runShell, updateTodo } from "evalgate";
 
 // Persistence
-import { appendRun, queryRuns, getLastFailure, getLastRun, onRun } from "greenlight";
-import { sendMessage, listMessages } from "greenlight";
-import { reportTokenUsage, queryBudgetRecords, getTotalTokens, getBudgetSummary } from "greenlight";
+import { appendRun, queryRuns, getLastFailure, getLastRun, onRun } from "evalgate";
+import { sendMessage, listMessages } from "evalgate";
+import { reportTokenUsage, queryBudgetRecords, getTotalTokens, getBudgetSummary } from "evalgate";
 
 // Memory + analysis
-import { suggest, detectPatterns, exportSnapshot, snapshotToMarkdown, diffSnapshots, diffToMarkdown } from "greenlight";
+import { suggest, detectPatterns, exportSnapshot, snapshotToMarkdown, diffSnapshots, diffToMarkdown } from "evalgate";
 
 // Servers
-import { startMcpServer, startUiServer, startWatcher, startDash } from "greenlight";
+import { startMcpServer, startUiServer, startWatcher, startDash } from "evalgate";
 
 // Cron helpers
-import { parseCron, matchesCron, nextFireMs } from "greenlight";
+import { parseCron, matchesCron, nextFireMs } from "evalgate";
 ```
 
 ---
@@ -447,18 +447,18 @@ import { parseCron, matchesCron, nextFireMs } from "greenlight";
 
 ### Codex / any CLI / git hooks
 
-`greenlight check` is provider-agnostic. Wire it anywhere a shell command runs:
+`evalgate check` is provider-agnostic. Wire it anywhere a shell command runs:
 
 ```bash
 # post-commit hook inside a worktree
-greenlight check todo.md || echo "Contracts failed — review before merging."
+evalgate check todo.md || echo "Contracts failed — review before merging."
 ```
 
 ### CI (GitHub Actions)
 
 ```yaml
-- name: Check greenlight contracts
-  run: npx greenlight check
+- name: Check evalgate contracts
+  run: npx evalgate check
 ```
 
 ---
@@ -470,10 +470,10 @@ All v0.1 through v0.8 milestones have shipped.
 | Version | Feature | Status |
 | ------- | ------- | ------ |
 | v0.1 | Parser, shell verifier, CLI (`check`, `list`), Claude Code hook | Shipped |
-| v0.2 | MCP server (15 tools), `greenlight serve` | Shipped |
-| v0.3 | Triggers (`schedule`, `watch`, `webhook`), `greenlight watch` | Shipped |
-| v0.4 | Durable run log, structured agent messaging, `greenlight retry` | Shipped |
-| v0.5 | Web UI (`greenlight ui`), ANSI dashboard (`greenlight dash`) | Shipped |
+| v0.2 | MCP server (15 tools), `evalgate serve` | Shipped |
+| v0.3 | Triggers (`schedule`, `watch`, `webhook`), `evalgate watch` | Shipped |
+| v0.4 | Durable run log, structured agent messaging, `evalgate retry` | Shipped |
+| v0.5 | Web UI (`evalgate ui`), ANSI dashboard (`evalgate dash`) | Shipped |
 | v0.6 | Budget tracking, provider/role hints, MCP-scoped contracts | Shipped |
 | v0.7 | Memory/learning (`suggest`, `patterns`), `export`, failure analysis | Shipped |
 | v0.8 | Composite verifiers (`eval.all`, `eval.any`), LLM-judge (`eval.llm`), `diff`, GitHub Actions CI, Biome linter, pre-commit hook | Shipped |
@@ -482,7 +482,7 @@ All v0.1 through v0.8 milestones have shipped.
 - `--watch` mode for continuous re-checking on file save
 - Semantic-diff verifier kind (assert structural changes, not just exit codes)
 - MCP per-contract server scoping (whitelist which servers each worker can reach)
-- `greenlight retry <id>` with automatic failure-context injection
+- `evalgate retry <id>` with automatic failure-context injection
 - Vector-indexed template memory for smarter `suggest` results
 
 ---
@@ -490,18 +490,18 @@ All v0.1 through v0.8 milestones have shipped.
 ## Prior art and positioning
 
 - **Octogent / OpenHarness** — orchestrate multiple Claude Code sessions.
-  `greenlight` slots underneath them as the quality-gate layer they're missing.
+  `evalgate` slots underneath them as the quality-gate layer they're missing.
 - **promptfoo / braintrust** — eval LLM outputs at the prompt level.
-  `greenlight` evals *agent-produced changes* at the task level.
+  `evalgate` evals *agent-produced changes* at the task level.
 - **Claude Code native subagents** — invisible spawning, no quality gate.
-  `greenlight` contracts are plain markdown you can read, edit, and version.
+  `evalgate` contracts are plain markdown you can read, edit, and version.
 
 ```
-greenlight          ← primitive, no deps, quality gate layer
+evalgate          ← primitive, no deps, quality gate layer
     ↑
 Octogent            ← orchestrator, Claude Code only
 OpenHarness         ← full harness, multi-provider
-Your 24/7 setup     ← uses Claude Code + greenlight for gates
+Your 24/7 setup     ← uses Claude Code + evalgate for gates
 ```
 
 ---
