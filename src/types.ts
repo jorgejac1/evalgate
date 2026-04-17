@@ -47,3 +47,40 @@ export interface RunResult {
   exitCode: number;
   durationMs: number;
 }
+
+// ---------------------------------------------------------------------------
+// MCP protocol types (v0.2)
+// ---------------------------------------------------------------------------
+
+export interface McpJsonRpcRequest {
+  jsonrpc: "2.0";
+  id: string | number | null;
+  method: string;
+  params?: unknown;
+}
+
+export interface McpJsonRpcResponse {
+  jsonrpc: "2.0";
+  id: string | number | null;
+  result?: unknown;
+  error?: { code: number; message: string; data?: unknown };
+}
+
+export interface McpToolDefinition {
+  name: string;
+  description: string;
+  inputSchema: {
+    type: "object";
+    properties: Record<string, { type: string; description: string }>;
+    required?: string[];
+  };
+}
+
+export interface McpServerInfo {
+  name: string;
+  version: string;
+}
+
+export interface McpCapabilities {
+  tools?: Record<string, never>;
+}

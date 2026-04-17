@@ -1,6 +1,6 @@
 {
   "name": "greenlight",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Eval-gated todos for agentic coding. Your agents can't tick the checkbox until the verifier passes.",
   "type": "module",
   "bin": {

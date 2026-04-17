@@ -4,6 +4,7 @@ import { resolve, dirname, basename } from "node:path";
 import { parseTodo } from "./parser.js";
 import { runContract } from "./verifier.js";
 import { updateTodo } from "./writer.js";
+import { startMcpServer } from "./mcp.js";
 import type { RunResult } from "./types.js";
 
 const COLOR = process.stdout.isTTY && !process.env.NO_COLOR;
@@ -127,15 +128,80 @@ async function cmdList(todoPath: string): Promise<number> {
   return 0;
 }
 
+async function cmdRetry(contractId: string, todoPath: string): Promise<number> {
+  if (!contractId) {
+    console.error(`${C.red}greenlight retry: contract id required${C.reset}`);
+    console.error(`  usage: greenlight retry <id> [path]`);
+    return 1;
+  }
+  if (!existsSync(todoPath)) {
+    console.error(`${C.red}greenlight: file not found: ${todoPath}${C.reset}`);
+    return 1;
+  }
+
+  const source = readFileSync(todoPath, "utf8");
+  const contracts = parseTodo(source);
+  const normalized = contractId.trim().toLowerCase();
+  const contract = contracts.find(
+    (c) => c.id === normalized || c.title.toLowerCase() === normalized
+  );
+
+  if (!contract) {
+    console.error(`${C.red}greenlight: contract not found: ${contractId}${C.reset}`);
+    console.log(`\nAvailable ids:`);
+    for (const c of contracts) {
+      console.log(`  ${C.dim}${c.id}${C.reset} — ${c.title}`);
+    }
+    return 1;
+  }
+
+  if (!contract.verifier) {
+    console.error(`${C.red}greenlight: contract '${contractId}' has no verifier${C.reset}`);
+    return 1;
+  }
+
+  console.log(
+    `${C.bold}greenlight retry${C.reset} ${C.dim}·${C.reset} ${contract.title} ${C.dim}(${contract.id})${C.reset}\n`
+  );
+
+  const cwd = resolve(dirname(todoPath));
+  process.stdout.write(`  ${C.dim}▸${C.reset} running verifier ... `);
+  const result = await runContract(contract, cwd);
+
+  if (result.passed) {
+    console.log(`${C.green}✓ passed${C.reset} ${C.dim}(${result.durationMs}ms)${C.reset}`);
+    const updated = updateTodo(source, [result]);
+    if (updated !== source) writeFileSync(todoPath, updated);
+    return 0;
+  }
+
+  console.log(
+    `${C.red}✗ failed${C.reset} ${C.dim}(exit ${result.exitCode}, ${result.durationMs}ms)${C.reset}`
+  );
+
+  console.log(`\n${C.bold}Failure context for retry:${C.reset}`);
+  const combined = [result.stdout.trim(), result.stderr.trim()]
+    .filter(Boolean)
+    .join("\n");
+  const lines = combined.split("\n").slice(-30);
+  for (const l of lines) {
+    console.log(`  ${C.dim}│${C.reset} ${l}`);
+  }
+
+  return 1;
+}
+
 function usage(): void {
   console.log(
     `
 ${C.bold}greenlight${C.reset} — eval-gated todos for agents
 
 ${C.bold}USAGE${C.reset}
-  greenlight check [path]     Run verifiers on pending contracts
-  greenlight list  [path]     List contracts and their status
-  greenlight help             Show this message
+  greenlight check  [path]        Run verifiers on pending contracts
+  greenlight list   [path]        List contracts and their status
+  greenlight retry  <id> [path]   Rerun a single contract and show failure context
+  greenlight serve  [cwd]         Start MCP server on stdio
+  greenlight help                 Show this message
 
 ${C.bold}CONTRACT FORMAT${C.reset} (todo.md)
   - [ ] Refactor auth middleware to use JWT
@@ -150,16 +216,30 @@ ${C.dim}If no path is given, ./todo.md is used.${C.reset}
 
 async function main(): Promise<void> {
   const [cmd, ...args] = process.argv.slice(2);
-  const todoPath = args[0] ?? "todo.md";
 
   let exitCode = 0;
   switch (cmd) {
-    case "check":
+    case "check": {
+      const todoPath = args[0] ?? "todo.md";
       exitCode = await cmdCheck(todoPath);
       break;
-    case "list":
+    }
+    case "list": {
+      const todoPath = args[0] ?? "todo.md";
       exitCode = await cmdList(todoPath);
       break;
+    }
+    case "retry": {
+      const [contractId, todoPath = "todo.md"] = args;
+      exitCode = await cmdRetry(contractId ?? "", todoPath);
+      break;
+    }
+    case "serve": {
+      const cwd = args[0] ? resolve(args[0]) : process.cwd();
+      startMcpServer(cwd);
+      // startMcpServer keeps the process alive via readline — don't exit
+      return;
+    }
     case "help":
     case "--help":
     case "-h":
