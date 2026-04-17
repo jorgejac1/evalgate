@@ -10,7 +10,7 @@ verifier passes.
   - eval: `npm run test:add --silent`
   - retries: 2
   - budget: 20k
-- [ ] Implement `subtract(a, b)`
+- [x] Implement `subtract(a, b)`
   - eval: `npm run test:subtract --silent`
   - retries: 3
   - budget: 30k
