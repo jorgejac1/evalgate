@@ -12,7 +12,8 @@ import { appendFileSync, existsSync, mkdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { logDir } from "./log.js";
 import { sendMessage } from "./messages.js";
-import type { BudgetRecord, Contract } from "./types.js";
+import { swarmEvents } from "./swarm.js";
+import type { BudgetRecord, Contract, CostEvent } from "./types.js";
 
 // ---------------------------------------------------------------------------
 // Path helper
@@ -28,6 +29,15 @@ function ensureDir(todoPath: string): void {
 }
 
 // ---------------------------------------------------------------------------
+// Cost estimation (Sonnet 4 pricing as default; named "estimated" intentionally)
+// ---------------------------------------------------------------------------
+
+function estimateCost(input: number, output: number): number {
+	// Sonnet 4: $3/MTok input, $15/MTok output
+	return (input * 3 + output * 15) / 1_000_000;
+}
+
+// ---------------------------------------------------------------------------
 // Write
 // ---------------------------------------------------------------------------
 
@@ -36,16 +46,32 @@ export function reportTokenUsage(
 	contractId: string,
 	tokens: number,
 	contract?: Contract,
+	opts?: { inputTokens?: number; outputTokens?: number; workerId?: string },
 ): BudgetRecord {
 	const record: BudgetRecord = {
 		id: randomUUID(),
 		ts: new Date().toISOString(),
 		contractId,
 		tokens,
+		inputTokens: opts?.inputTokens,
+		outputTokens: opts?.outputTokens,
+		workerId: opts?.workerId,
 	};
 
 	ensureDir(todoPath);
 	appendFileSync(budgetPath(todoPath), `${JSON.stringify(record)}\n`, "utf8");
+
+	// Emit structured cost event (v0.12)
+	swarmEvents.emit("cost", {
+		type: "cost",
+		workerId: opts?.workerId ?? "",
+		contractId,
+		tokens: {
+			input: opts?.inputTokens ?? 0,
+			output: opts?.outputTokens ?? 0,
+		},
+		estimatedUsd: estimateCost(opts?.inputTokens ?? 0, opts?.outputTokens ?? 0),
+	} satisfies CostEvent);
 
 	// Auto-emit a budget_exceeded message if this pushes the contract over its limit
 	if (contract?.budget) {

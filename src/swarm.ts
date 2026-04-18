@@ -24,7 +24,14 @@ import { dirname, join, resolve as resolvePath } from "node:path";
 import { parseTodo } from "./parser.js";
 import { spawnAgent } from "./spawn.js";
 import { loadState, saveState, updateWorker } from "./swarm-state.js";
-import type { Contract, SwarmState, WorkerState, WorkerStatus } from "./types.js";
+import type {
+	Contract,
+	EvalResultEvent,
+	SwarmState,
+	TaskCompleteEvent,
+	WorkerState,
+	WorkerStatus,
+} from "./types.js";
 import { runContract } from "./verifier.js";
 import {
 	createWorktree,
@@ -94,6 +101,15 @@ function emitWorker(
 	if (state) swarmEvents.emit("state", state);
 }
 
+function emitTaskComplete(workerId: string, contractId: string, status: "done" | "failed"): void {
+	swarmEvents.emit("task-complete", {
+		type: "task-complete",
+		workerId,
+		contractId,
+		status,
+	} satisfies TaskCompleteEvent);
+}
+
 // ---------------------------------------------------------------------------
 // Single worker lifecycle
 // ---------------------------------------------------------------------------
@@ -118,6 +134,7 @@ async function runWorker(
 		const msg = err instanceof Error ? err.message : String(err);
 		writeFileSync(worker.logPath, `[evalgate swarm] worktree creation failed: ${msg}\n`);
 		emitWorker(todoPath, worker.id, "failed", { finishedAt: now() });
+		emitTaskComplete(worker.id, contract.id, "failed");
 		return;
 	}
 
@@ -145,9 +162,19 @@ async function runWorker(
 		trigger: "manual",
 	});
 
+	swarmEvents.emit("eval-result", {
+		type: "eval-result",
+		workerId: worker.id,
+		contractId: contract.id,
+		passed: result.passed,
+		output: result.stdout,
+		durationMs: result.durationMs,
+	} satisfies EvalResultEvent);
+
 	if (!result.passed) {
 		// Keep the worktree for human inspection.
 		emitWorker(todoPath, worker.id, "failed", { verifierPassed: false, finishedAt: now() });
+		emitTaskComplete(worker.id, contract.id, "failed");
 		return;
 	}
 
@@ -183,6 +210,7 @@ async function runWorker(
 		const msg = err instanceof Error ? err.message : String(err);
 		writeFileSync(worker.logPath, `\n[evalgate swarm] merge failed: ${msg}\n`, { flag: "a" });
 		emitWorker(todoPath, worker.id, "failed", { finishedAt: now() });
+		emitTaskComplete(worker.id, contract.id, "failed");
 		return;
 	}
 
@@ -191,6 +219,7 @@ async function runWorker(
 	deleteBranch(repoRoot, worker.branch);
 
 	emitWorker(todoPath, worker.id, "done", { finishedAt: now() });
+	emitTaskComplete(worker.id, contract.id, "done");
 }
 
 // ---------------------------------------------------------------------------

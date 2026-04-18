@@ -41,6 +41,12 @@ export interface BudgetRecord {
 	ts: string; // ISO 8601
 	contractId: string;
 	tokens: number;
+	/** Input token count breakdown (v0.12+) */
+	inputTokens?: number;
+	/** Output token count breakdown (v0.12+) */
+	outputTokens?: number;
+	/** Worker id for swarm correlation (v0.12+) */
+	workerId?: string;
 }
 
 export type Status = "pending" | "passed" | "failed";
@@ -194,6 +200,42 @@ export interface SwarmState {
 	todoPath: string;
 	workers: WorkerState[];
 }
+
+// ---------------------------------------------------------------------------
+// Structured swarm event types (v0.12)
+// ---------------------------------------------------------------------------
+
+/** Emitted on swarmEvents after the verifier runs for a worker. */
+export interface EvalResultEvent {
+	type: "eval-result";
+	workerId: string;
+	contractId: string;
+	passed: boolean;
+	/** Verifier stdout */
+	output: string;
+	durationMs: number;
+}
+
+/** Emitted on swarmEvents when token usage is reported via reportTokenUsage(). */
+export interface CostEvent {
+	type: "cost";
+	workerId: string;
+	contractId: string;
+	tokens: { input: number; output: number };
+	/** Estimated cost in USD (Sonnet 4 rates: $3/$15 per MTok in/out) */
+	estimatedUsd: number;
+}
+
+/** Emitted on swarmEvents when a worker reaches a terminal state (done or failed). */
+export interface TaskCompleteEvent {
+	type: "task-complete";
+	workerId: string;
+	contractId: string;
+	status: "done" | "failed";
+}
+
+/** Discriminated union of all structured swarm events (v0.12+). */
+export type SwarmEvent = EvalResultEvent | CostEvent | TaskCompleteEvent;
 
 // ---------------------------------------------------------------------------
 // MCP protocol types (v0.2)

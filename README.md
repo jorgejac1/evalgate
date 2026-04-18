@@ -5,7 +5,7 @@
 
 [![MIT](https://img.shields.io/badge/license-MIT-green.svg)](./LICENSE)
 [![Node 18+](https://img.shields.io/badge/node-18%2B-blue.svg)](#)
-[![v0.11.0](https://img.shields.io/badge/version-v0.11.0-brightgreen.svg)](#roadmap)
+[![v0.12.0](https://img.shields.io/badge/version-v0.12.0-brightgreen.svg)](#roadmap)
 
 ---
 
@@ -595,6 +595,7 @@ evalgate check todo.md || echo "Contracts failed — review before merging."
 | v0.9 | Swarm orchestrator — parallel workers, git worktrees, verifier-gated merge | Shipped |
 | v0.10 | Export swarm/worktree/spawn APIs for orchestrator consumers, `retryWorker` with failure-context injection | Shipped |
 | v0.11 | MCP named workspaces — expose multiple `todo.md` files as a single MCP server with workspace routing | Shipped |
+| v0.12 | Structured swarm events — `"eval-result"`, `"cost"`, `"task-complete"` typed events on `swarmEvents`; `SwarmEvent` discriminated union exported | Shipped |
 
 **Up next:**
 - `--watch` mode for continuous re-checking on file save
