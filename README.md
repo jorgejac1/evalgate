@@ -569,7 +569,7 @@ evalgate check todo.md || echo "Contracts failed — review before merging."
 ## Prior art and positioning
 
 - **[conductor](https://github.com/jorgejac1/conductor-agents)** — multi-agent orchestrator
-  built on top of evalgate. If you want tentacle-scoped parallel workers with a web
+  built on top of evalgate. If you want track-scoped parallel workers with a web
   dashboard and CLI, use conductor. evalgate is its quality gate engine.
 - **Octogent / OpenHarness** — orchestrate multiple Claude Code sessions.
   `evalgate` slots underneath them as the quality-gate layer they're missing.
@@ -579,7 +579,7 @@ evalgate check todo.md || echo "Contracts failed — review before merging."
   `evalgate` contracts are plain markdown you can read, edit, and version.
 
 ```
-conductor           ← orchestrator built on evalgate (tentacles, UI, retry)
+conductor           ← orchestrator built on evalgate (tracks, UI, retry)
     ↓
 evalgate            ← primitive, no deps, quality gate layer
     ↑
