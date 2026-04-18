@@ -9,12 +9,13 @@ import assert from "node:assert/strict";
 import { execSync, spawnSync } from "node:child_process";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { test } from "node:test";
+import { fileURLToPath } from "node:url";
 import { saveState } from "../src/swarm-state.js";
 import type { SwarmState } from "../src/types.js";
 
-const CLI = join(import.meta.dirname ?? __dirname, "..", "dist", "cli.js");
+const CLI = resolve(fileURLToPath(import.meta.url), "..", "..", "dist", "cli.js");
 
 function makeTmpRepo(): string {
 	const dir = join(
