@@ -1001,11 +1001,21 @@ async function main(): Promise<void> {
 		case "swarm": {
 			const flags = args.filter((a) => a.startsWith("--"));
 			const positional = args.filter((a) => !a.startsWith("--"));
-			// "status" sub-command: evalgate swarm status [path]
-			const subCmd = positional[0] === "status" ? "status" : undefined;
-			const pathArg = subCmd === "status" ? positional[1] : positional[0];
+			const subCmd = ["status", "retry"].includes(positional[0] ?? "") ? positional[0] : undefined;
+			let pathArg: string | undefined;
+			let swarmArgs: string[];
+			if (subCmd === "status") {
+				pathArg = positional[1];
+				swarmArgs = ["status", ...flags];
+			} else if (subCmd === "retry") {
+				// evalgate swarm retry <worker-id> [path]
+				pathArg = positional[2];
+				swarmArgs = ["retry", positional[1] ?? "", ...flags];
+			} else {
+				pathArg = positional[0];
+				swarmArgs = flags;
+			}
 			const todoPath = resolve(pathArg ?? "todo.md");
-			const swarmArgs = subCmd ? ["status", ...flags] : flags;
 			exitCode = await cmdSwarm(todoPath, swarmArgs);
 			break;
 		}
