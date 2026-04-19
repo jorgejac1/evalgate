@@ -34,6 +34,13 @@ jobs:
       - run: pnpm test
 
       - name: Publish to npm
-        run: pnpm publish --no-git-checks
+        run: |
+          PKG=$(node -p "require('./package.json').name")
+          VER=$(node -p "require('./package.json').version")
+          if npm view "${PKG}@${VER}" version 2>/dev/null | grep -q "${VER}"; then
+            echo "v${VER} already published — skipping"
+          else
+            pnpm publish --no-git-checks --access public
+          fi
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
