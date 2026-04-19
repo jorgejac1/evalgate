@@ -3,8 +3,11 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, describe, it } from "node:test";
-import { startCheckWatch } from "../src/check-watch.js";
+import { isRecursiveWatchSupported, startCheckWatch } from "../src/check-watch.js";
 import type { RunResult } from "../src/types.js";
+
+// fs.watch({ recursive: true }) is macOS/Windows only — skip on Linux.
+const SKIP_WATCH = !isRecursiveWatchSupported();
 
 function makeTmp(label: string): string {
 	return mkdtempSync(join(tmpdir(), `gl-check-watch-${label}-`));
@@ -18,7 +21,7 @@ function waitMs(ms: number): Promise<void> {
 // Re-runs failing contract when a tracked file changes
 // ---------------------------------------------------------------------------
 
-describe("startCheckWatch — re-run on file change", () => {
+describe("startCheckWatch — re-run on file change", { skip: SKIP_WATCH }, () => {
 	const dirs: string[] = [];
 	after(() => {
 		for (const d of dirs) rmSync(d, { recursive: true, force: true });
@@ -75,7 +78,7 @@ describe("startCheckWatch — re-run on file change", () => {
 // Stops automatically when all contracts pass
 // ---------------------------------------------------------------------------
 
-describe("startCheckWatch — auto-stop when all pass", () => {
+describe("startCheckWatch — auto-stop when all pass", { skip: SKIP_WATCH }, () => {
 	const dirs: string[] = [];
 	after(() => {
 		for (const d of dirs) rmSync(d, { recursive: true, force: true });
@@ -133,7 +136,7 @@ describe("startCheckWatch — auto-stop when all pass", () => {
 // Ignores changes in .git and node_modules
 // ---------------------------------------------------------------------------
 
-describe("startCheckWatch — ignored directories", () => {
+describe("startCheckWatch — ignored directories", { skip: SKIP_WATCH }, () => {
 	const dirs: string[] = [];
 	after(() => {
 		for (const d of dirs) rmSync(d, { recursive: true, force: true });
@@ -188,7 +191,7 @@ describe("startCheckWatch — ignored directories", () => {
 // Debounces rapid file changes
 // ---------------------------------------------------------------------------
 
-describe("startCheckWatch — debounce", () => {
+describe("startCheckWatch — debounce", { skip: SKIP_WATCH }, () => {
 	const dirs: string[] = [];
 	after(() => {
 		for (const d of dirs) rmSync(d, { recursive: true, force: true });

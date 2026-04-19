@@ -16,7 +16,21 @@ export interface CheckWatchHandle {
 	stop: () => void;
 }
 
+/**
+ * Returns true on platforms where `fs.watch` supports `{ recursive: true }`.
+ * Linux uses inotify which does not support recursive watching natively.
+ */
+export function isRecursiveWatchSupported(): boolean {
+	return process.platform === "darwin" || process.platform === "win32";
+}
+
 export function startCheckWatch(opts: CheckWatchOptions): CheckWatchHandle {
+	if (!isRecursiveWatchSupported()) {
+		throw new Error(
+			`evalgate watch mode requires macOS or Windows — fs.watch({ recursive: true }) is not supported on ${process.platform}`,
+		);
+	}
+
 	const { todoPath, failedIds, onCycle } = opts;
 	const cwd = opts.cwd ?? process.cwd();
 	const watchDir = resolve(dirname(todoPath));
