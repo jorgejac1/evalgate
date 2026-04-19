@@ -110,3 +110,37 @@ test("sub-bullet must be more indented than checkbox", () => {
 	const [c] = parseTodo(src);
 	assert.equal(c.verifier, undefined);
 });
+
+test("parses eval.diff has syntax", () => {
+	const source = [
+		"- [ ] Add JWT validation",
+		'  - eval.diff: src/auth.ts has "function validateToken"',
+	].join("\n");
+	const [c] = parseTodo(source);
+	assert.deepEqual(c.verifier, {
+		kind: "diff",
+		file: "src/auth.ts",
+		mode: "has",
+		pattern: "function validateToken",
+	});
+});
+
+test("parses eval.diff lacks syntax", () => {
+	const source = [
+		"- [ ] Remove deprecated helper",
+		'  - eval.diff: src/utils.ts lacks "deprecatedFn"',
+	].join("\n");
+	const [c] = parseTodo(source);
+	assert.deepEqual(c.verifier, {
+		kind: "diff",
+		file: "src/utils.ts",
+		mode: "lacks",
+		pattern: "deprecatedFn",
+	});
+});
+
+test("ignores malformed eval.diff (no mode)", () => {
+	const source = ["- [ ] Bad diff", "  - eval.diff: src/auth.ts badmode pattern"].join("\n");
+	const [c] = parseTodo(source);
+	assert.strictEqual(c.verifier, undefined);
+});

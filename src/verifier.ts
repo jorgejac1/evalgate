@@ -1,7 +1,9 @@
 import { spawn } from "node:child_process";
+import { readFileSync } from "node:fs";
 import { request } from "node:https";
+import { resolve } from "node:path";
 import { appendRun } from "./log.js";
-import type { Contract, RunResult, ShellVerifier, TriggerSource } from "./types.js";
+import type { Contract, DiffVerifier, RunResult, ShellVerifier, TriggerSource } from "./types.js";
 
 interface ShellOutcome {
 	stdout: string;
@@ -200,6 +202,55 @@ async function runLlmJudge(contract: Contract, prompt: string, model: string): P
 	});
 }
 
+function runDiff(verifier: DiffVerifier, cwd: string, contract: Contract): RunResult {
+	const filePath = resolve(cwd, verifier.file);
+	const start = Date.now();
+	let content: string;
+	try {
+		content = readFileSync(filePath, "utf8");
+	} catch {
+		return {
+			contract,
+			passed: false,
+			stdout: "",
+			stderr: `file not found: ${verifier.file}`,
+			exitCode: 1,
+			durationMs: Date.now() - start,
+		};
+	}
+	let regex: RegExp;
+	try {
+		regex = new RegExp(verifier.pattern);
+	} catch {
+		return {
+			contract,
+			passed: false,
+			stdout: "",
+			stderr: `invalid regex pattern: ${verifier.pattern}`,
+			exitCode: 1,
+			durationMs: Date.now() - start,
+		};
+	}
+	const matches = regex.test(content);
+	const passed = verifier.mode === "has" ? matches : !matches;
+	const stdout =
+		verifier.mode === "has"
+			? passed
+				? `pattern found in ${verifier.file}`
+				: `pattern not found in ${verifier.file}`
+			: passed
+				? `pattern absent from ${verifier.file}`
+				: `pattern still present in ${verifier.file}`;
+	return {
+		contract,
+		passed,
+		stdout,
+		stderr: "",
+		exitCode: passed ? 0 : 1,
+		durationMs: Date.now() - start,
+	};
+}
+
 export async function runContract(
 	contract: Contract,
 	cwd: string,
@@ -233,6 +284,8 @@ export async function runContract(
 	} else if (contract.verifier.kind === "llm") {
 		const model = contract.verifier.model ?? "claude-haiku-4-5-20251001";
 		result = await runLlmJudge(contract, contract.verifier.prompt, model);
+	} else if (contract.verifier.kind === "diff") {
+		result = runDiff(contract.verifier, cwd, contract);
 	} else {
 		result = {
 			contract,

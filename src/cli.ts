@@ -39,6 +39,7 @@ function formatCommand(v: RunResult["contract"]["verifier"]): string {
 	if (v.kind === "shell") return v.command;
 	if (v.kind === "composite") return `${v.mode}(${v.steps.length} steps)`;
 	if (v.kind === "llm") return `llm: ${v.prompt.slice(0, 60)}`;
+	if (v.kind === "diff") return `diff: ${v.file} ${v.mode} "${v.pattern}"`;
 	return "unknown";
 }
 

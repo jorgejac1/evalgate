@@ -1,4 +1,4 @@
-import type { Contract, ContractTrigger, ShellVerifier, Verifier } from "./types.js";
+import type { Contract, ContractTrigger, DiffVerifier, ShellVerifier, Verifier } from "./types.js";
 
 const CHECKBOX_RE = /^(\s*)-\s+\[([ xX])\]\s+(.*)$/;
 const SUB_BULLET_RE = /^(\s+)-\s+([a-zA-Z][\w.-]*)\s*:\s*(.*)$/;
@@ -72,6 +72,14 @@ function buildVerifier(fields: Record<string, string>): Verifier | undefined {
 	// LLM-judge verifier: eval.llm: <prompt>
 	if (fields["eval.llm"]) {
 		return { kind: "llm", prompt: fields["eval.llm"] };
+	}
+
+	// Diff verifier: eval.diff: <file> has|lacks "<pattern>"
+	if (fields["eval.diff"]) {
+		const m = fields["eval.diff"].match(/^(\S+)\s+(has|lacks)\s+"([^"]+)"$/);
+		if (m) {
+			return { kind: "diff", file: m[1], mode: m[2] as DiffVerifier["mode"], pattern: m[3] };
+		}
 	}
 
 	// Composite verifier: eval.all or eval.any — pipe-separated commands

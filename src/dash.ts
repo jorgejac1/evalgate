@@ -97,7 +97,9 @@ function render(todoPath: string): void {
 						? c.verifier.command
 						: c.verifier.kind === "composite"
 							? `${c.verifier.mode}(${c.verifier.steps.length})`
-							: `llm: ${c.verifier.prompt.slice(0, 40)}`) +
+							: c.verifier.kind === "llm"
+								? `llm: ${c.verifier.prompt.slice(0, 40)}`
+								: `diff: ${c.verifier.file} ${c.verifier.mode}`) +
 					C.reset
 				: "";
 			push(`  ${mark} ${c.title}${cmd}`);

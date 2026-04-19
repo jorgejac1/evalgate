@@ -40,6 +40,7 @@ export type {
 	Contract,
 	ContractTrigger,
 	CostEvent,
+	DiffVerifier,
 	EvalResultEvent,
 	GatewayConfig,
 	LlmVerifier,

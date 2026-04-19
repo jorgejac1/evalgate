@@ -73,7 +73,18 @@ export interface LlmVerifier {
 	model?: string;
 }
 
-export type Verifier = ShellVerifier | CompositeVerifier | LlmVerifier;
+/** Structural-diff verifier — asserts a pattern is present or absent in a file (v0.14+). */
+export interface DiffVerifier {
+	kind: "diff";
+	/** File path relative to cwd. */
+	file: string;
+	/** Regex pattern to test against file contents. */
+	pattern: string;
+	/** "has" = pattern must match; "lacks" = pattern must NOT match. */
+	mode: "has" | "lacks";
+}
+
+export type Verifier = ShellVerifier | CompositeVerifier | LlmVerifier | DiffVerifier;
 
 // ---------------------------------------------------------------------------
 // Trigger types (v0.3)
