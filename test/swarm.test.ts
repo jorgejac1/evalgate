@@ -419,6 +419,39 @@ test("runSwarm does not write a PASS record when merge fails after verifier pass
 	}
 });
 
+test("runSwarm concurrent workers all complete without merge conflicts", async () => {
+	// This test specifically exercises the merge-mutex fix. Without the mutex,
+	// concurrent workers branch from the same HEAD and both update todo.md,
+	// causing an add/add conflict when the second worker tries to merge.
+	const dir = makeTmpRepo();
+	try {
+		const todoPath = writeTodo(
+			dir,
+			[
+				"- [ ] Concurrent task A",
+				"  - eval: `true`",
+				"- [ ] Concurrent task B",
+				"  - eval: `true`",
+				"- [ ] Concurrent task C",
+				"  - eval: `true`",
+			].join("\n"),
+		);
+		const result = await runSwarm({
+			todoPath,
+			concurrency: 3,
+			agentCmd: "node",
+			agentArgs: ["-e", "process.exit(0)"],
+		});
+		assert.equal(result.state.workers.length, 3);
+		const done = result.state.workers.filter((w) => w.status === "done").length;
+		const failed = result.state.workers.filter((w) => w.status === "failed").length;
+		assert.equal(done, 3, "all 3 concurrent workers should complete without merge conflicts");
+		assert.equal(failed, 0, "no worker should fail due to merge conflict");
+	} finally {
+		cleanup(dir);
+	}
+});
+
 test("runSwarm writes exactly one run record per failing contract", async () => {
 	const dir = makeTmpRepo();
 	try {

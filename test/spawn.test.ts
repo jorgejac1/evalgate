@@ -153,3 +153,130 @@ test("spawnAgent writes header lines to the log", async () => {
 		cleanup(dir);
 	}
 });
+
+test("taskContext is prepended to task in default args", async () => {
+	const dir = makeTmpDir();
+	try {
+		const logPath = join(dir, "sessions", "w8.log");
+		await spawnAgent({
+			cwd: dir,
+			task: "fix login",
+			logPath,
+			agentCmd: "node",
+			// Print the first arg (the full prompt) to stdout so we can inspect it
+			agentArgs: ["-e", "process.stdout.write(process.argv[1])", "{task}"],
+			taskContext: "You are working on auth",
+		});
+		const contents = readFileSync(logPath, "utf8");
+		assert.ok(contents.includes("You are working on auth"), "context should appear in log");
+		assert.ok(contents.includes("fix login"), "task should appear in log");
+		assert.ok(contents.includes("---"), "separator should appear between context and task");
+		assert.ok(contents.includes("## Task"), "Task header should appear");
+	} finally {
+		cleanup(dir);
+	}
+});
+
+test("{task} substitution works in custom agentArgs", async () => {
+	const dir = makeTmpDir();
+	try {
+		const logPath = join(dir, "sessions", "w9.log");
+		await spawnAgent({
+			cwd: dir,
+			task: "hello world",
+			logPath,
+			agentCmd: "node",
+			agentArgs: ["-e", "process.stdout.write('{task}')"],
+		});
+		const contents = readFileSync(logPath, "utf8");
+		assert.ok(contents.includes("hello world"), "{task} should be replaced with task title");
+	} finally {
+		cleanup(dir);
+	}
+});
+
+test("{task} substitution includes taskContext when both are set", async () => {
+	const dir = makeTmpDir();
+	try {
+		const logPath = join(dir, "sessions", "w10.log");
+		await spawnAgent({
+			cwd: dir,
+			task: "add rate limiting",
+			logPath,
+			agentCmd: "node",
+			agentArgs: ["-e", "process.stdout.write('{task}')"],
+			taskContext: "# Auth track\n\nOwns src/auth/**",
+		});
+		const contents = readFileSync(logPath, "utf8");
+		assert.ok(contents.includes("# Auth track"), "context should be in substituted {task}");
+		assert.ok(contents.includes("add rate limiting"), "task title should be in substituted {task}");
+		assert.ok(contents.includes("## Task"), "Task section header should be present");
+	} finally {
+		cleanup(dir);
+	}
+});
+
+test("spawnAgent strips UTF-8 BOM from taskContext", async () => {
+	const dir = makeTmpDir();
+	try {
+		const logPath = join(dir, "sessions", "w11.log");
+		await spawnAgent({
+			cwd: dir,
+			task: "do work",
+			logPath,
+			agentCmd: "node",
+			agentArgs: ["-e", "process.stdout.write(process.argv[2])", "x", "{task}"],
+			taskContext: "\uFEFF# Auth Module\n\nContext here.", // BOM-prefixed
+		});
+		const contents = readFileSync(logPath, "utf8");
+		assert.ok(
+			!contents.includes("\uFEFF"),
+			"BOM should be stripped from the prompt sent to the agent",
+		);
+		assert.ok(contents.includes("# Auth Module"), "context content should still be present");
+	} finally {
+		cleanup(dir);
+	}
+});
+
+test("spawnAgent falls back to default args when agentArgs is empty array", async () => {
+	const dir = makeTmpDir();
+	try {
+		const logPath = join(dir, "sessions", "w11.log");
+		await spawnAgent({
+			cwd: dir,
+			task: "important task",
+			logPath,
+			agentCmd: "echo",
+			agentArgs: [], // empty — should fall through to ["--print", task]
+		});
+		const contents = readFileSync(logPath, "utf8");
+		assert.ok(contents.includes("important task"), "task should reach the agent via default args");
+	} finally {
+		cleanup(dir);
+	}
+});
+
+test("spawnAgent escapes newlines in log header", async () => {
+	const dir = makeTmpDir();
+	try {
+		const logPath = join(dir, "sessions", "w12.log");
+		await spawnAgent({
+			cwd: dir,
+			task: "line one\nline two\nline three",
+			logPath,
+			agentCmd: "echo",
+		});
+		const contents = readFileSync(logPath, "utf8");
+		const headerLine = contents.split("\n")[0];
+		assert.ok(
+			headerLine.startsWith("[evalgate swarm] starting agent:"),
+			"header should start correctly",
+		);
+		// The header line itself must not split across lines
+		assert.ok(!headerLine.includes("\n"), "header line must not contain raw newlines");
+		assert.ok(headerLine.includes("\\n"), "newlines should be escaped as \\n in header");
+	} finally {
+		cleanup(dir);
+	}
+});

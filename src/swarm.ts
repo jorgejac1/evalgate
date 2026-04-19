@@ -65,6 +65,11 @@ export interface SwarmOptions {
 	agentCmd?: string;
 	/** Full agent arg list. When set, overrides the default --headless --print args. */
 	agentArgs?: string[];
+	/**
+	 * Context string prepended to every task in this swarm run.
+	 * Use {task} in agentArgs to reference the full prompt (context + title).
+	 */
+	taskContext?: string;
 }
 
 export interface SwarmResult {
@@ -80,6 +85,37 @@ export interface SwarmResult {
 
 // Git branch names capped at 40 chars for safety
 const slugify = (s: string) => _slugifyBase(s, 40);
+
+/**
+ * Simple async mutex — ensures at most one holder at a time.
+ *
+ * Used to serialize the commit+merge phase across concurrent workers so that
+ * each worker reads the latest todo.md from the main branch before committing,
+ * preventing add/add conflicts on todo.md when multiple workers merge in parallel.
+ */
+class Mutex {
+	private _locked = false;
+	private _queue: Array<() => void> = [];
+
+	acquire(): Promise<void> {
+		if (!this._locked) {
+			this._locked = true;
+			return Promise.resolve();
+		}
+		return new Promise<void>((resolve) => {
+			this._queue.push(resolve);
+		});
+	}
+
+	release(): void {
+		const next = this._queue.shift();
+		if (next) {
+			next();
+		} else {
+			this._locked = false;
+		}
+	}
+}
 
 function workerLogPath(todoPath: string, workerId: string): string {
 	return join(dirname(todoPath), ".evalgate", "sessions", `${workerId}.log`);
@@ -119,6 +155,8 @@ async function runWorker(
 	opts: SwarmOptions,
 	/** Optional extra env vars merged into the agent process environment. */
 	extraEnv?: Record<string, string>,
+	/** Shared mutex that serializes the commit+merge phase across concurrent workers. */
+	mergeMutex?: Mutex,
 ): Promise<void> {
 	const now = () => new Date().toISOString();
 
@@ -148,6 +186,7 @@ async function runWorker(
 		logPath: worker.logPath,
 		agentCmd: opts.agentCmd,
 		agentArgs: opts.agentArgs,
+		taskContext: opts.taskContext,
 		env: extraEnv,
 	});
 
@@ -180,29 +219,38 @@ async function runWorker(
 	// ── 4. merging ───────────────────────────────────────────────────────────
 	emitWorker(todoPath, worker.id, "merging", { verifierPassed: true });
 
-	// Update the checkbox in the worktree's todo.md and commit.
-	const updatedSource = updateTodo(readFileSync(worktreeTodoPath, "utf8"), [result]);
-	writeFileSync(worktreeTodoPath, updatedSource);
-
+	// Serialize commit+merge across concurrent workers via the shared mutex.
+	// Without serialization, two workers can branch from the same HEAD, both
+	// update todo.md, and produce an add/add conflict on merge.
+	//
+	// Inside the lock we read the LATEST todo.md from the main repo (not the
+	// stale worktree copy) so each worker's commit is a superset of all
+	// previously merged workers — making the subsequent git merge conflict-free.
+	if (mergeMutex) await mergeMutex.acquire();
 	try {
-		execSync("git add -A", { cwd: worker.worktreePath, stdio: "pipe" });
-		// Unstage .evalgate/ — runContract writes run logs there, and merging
-		// them causes add/add conflicts when multiple workers run in parallel.
+		// Read the current main-branch todo.md and apply this worker's result.
+		const latestSource = readFileSync(todoPath, "utf8");
+		const updatedSource = updateTodo(latestSource, [result]);
+		writeFileSync(worktreeTodoPath, updatedSource);
+
 		try {
-			execSync("git restore --staged .evalgate", { cwd: worker.worktreePath, stdio: "pipe" });
+			execSync("git add -A", { cwd: worker.worktreePath, stdio: "pipe" });
+			// Unstage .evalgate/ — runContract writes run logs there, and merging
+			// them causes add/add conflicts when multiple workers run in parallel.
+			try {
+				execSync("git restore --staged .evalgate", { cwd: worker.worktreePath, stdio: "pipe" });
+			} catch {
+				/* .evalgate wasn't staged — fine */
+			}
+			execSync(`git commit --no-gpg-sign -m "evalgate: ${contract.title}"`, {
+				cwd: worker.worktreePath,
+				stdio: "pipe",
+			});
 		} catch {
-			/* .evalgate wasn't staged — fine */
+			// Commit may fail if the agent already committed everything, or if
+			// there are no staged changes. Both are fine — proceed with merge.
 		}
-		execSync(`git commit --no-gpg-sign -m "evalgate: ${contract.title}"`, {
-			cwd: worker.worktreePath,
-			stdio: "pipe",
-		});
-	} catch {
-		// Commit may fail if the agent already committed everything, or if
-		// there are no staged changes. Both are fine — proceed with merge.
-	}
 
-	try {
 		mergeWorktree(repoRoot, worker.branch);
 	} catch (err) {
 		// Merge conflict or other git failure — keep the worktree.
@@ -211,6 +259,8 @@ async function runWorker(
 		emitWorker(todoPath, worker.id, "failed", { finishedAt: now() });
 		emitTaskComplete(worker.id, contract.id, "failed");
 		return;
+	} finally {
+		if (mergeMutex) mergeMutex.release();
 	}
 
 	// Clean up: worktree and branch are no longer needed.
@@ -408,6 +458,10 @@ export async function runSwarm(opts: SwarmOptions): Promise<SwarmResult> {
 	const pending = state.workers.filter((w) => w.status === "pending");
 	const contractMap = new Map(contracts.map((c) => [c.id, c]));
 
+	// One mutex per swarm run — serializes the commit+merge phase so concurrent
+	// workers don't produce add/add conflicts on todo.md.
+	const mergeMutex = new Mutex();
+
 	let done = 0;
 	let failed = 0;
 	let skipped = 0;
@@ -421,7 +475,7 @@ export async function runSwarm(opts: SwarmOptions): Promise<SwarmResult> {
 					skipped++;
 					return;
 				}
-				await runWorker(worker, contract, todoPath, repoRoot, opts);
+				await runWorker(worker, contract, todoPath, repoRoot, opts, undefined, mergeMutex);
 				// Read fresh state to get the actual final status.
 				const fresh = loadState(todoPath);
 				const w = fresh?.workers.find((x) => x.id === worker.id);

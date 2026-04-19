@@ -6,8 +6,11 @@
  * value is the exit code.
  *
  * The default command is `claude --print "<task>"` which sends the
- * task title as the first user message to Claude Code in non-interactive mode.
+ * task title (optionally preceded by taskContext) as the first user message to
+ * Claude Code in non-interactive mode.
  * Override with agentCmd/agentArgs for testing or alternative agents.
+ * Use {task} in agentArgs as a placeholder that is replaced with the full
+ * prompt (context + task title) at spawn time.
  *
  * Zero runtime dependencies — uses Node built-ins only.
  */
@@ -25,8 +28,18 @@ export interface SpawnOpts {
 	logPath: string;
 	/** Agent executable. Defaults to "claude". */
 	agentCmd?: string;
-	/** Full arg list. Defaults to ["--print", task]. */
+	/**
+	 * Full arg list. Defaults to ["--print", fullTask].
+	 * Use {task} as a placeholder — it is replaced with the full prompt
+	 * (taskContext + task title) at spawn time.
+	 */
 	agentArgs?: string[];
+	/**
+	 * Context prepended to the task when building the prompt string.
+	 * Injected before the contract title with a "## Task" separator.
+	 * Works with any agent CLI — no special flags required.
+	 */
+	taskContext?: string;
 	/**
 	 * Additional environment variables to merge into the agent process env.
 	 * Merged on top of process.env — use this for retry context injection.
@@ -41,13 +54,29 @@ export interface SpawnOpts {
 export async function spawnAgent(opts: SpawnOpts): Promise<number> {
 	const { cwd, task, logPath } = opts;
 	const cmd = opts.agentCmd ?? "claude";
-	const args = opts.agentArgs ?? ["--print", task];
+
+	// Build the full prompt: prepend context if provided.
+	// Strip UTF-8 BOM (\uFEFF) that Windows editors sometimes prepend to context files.
+	const cleanContext = opts.taskContext?.replace(/^\uFEFF/, "");
+	const fullTask = cleanContext ? `${cleanContext}\n\n---\n\n## Task\n\n${task}` : task;
+
+	// Substitute {task} in custom args; fall back to Claude defaults.
+	// An empty agentArgs array is treated as "not set" — prevents silently
+	// spawning an agent with zero arguments when the user misconfigures it.
+	const args =
+		opts.agentArgs && opts.agentArgs.length > 0
+			? opts.agentArgs.map((a) => a.replaceAll("{task}", fullTask))
+			: ["--print", fullTask];
 
 	mkdirSync(dirname(logPath), { recursive: true });
 	const logStream = createWriteStream(logPath, { flags: "a" });
 
-	// Write a header line so the log is self-describing
-	logStream.write(`[evalgate swarm] starting agent: ${cmd} ${args.join(" ")}\n`);
+	// Write a header line so the log is self-describing.
+	// Escape newlines and truncate to 200 chars so the header stays on a single
+	// readable line even when a large taskContext is substituted into {task}.
+	const rawHeader = args.join(" ").replace(/\n/g, "\\n");
+	const safeArgs = rawHeader.length > 200 ? `${rawHeader.slice(0, 200)}…` : rawHeader;
+	logStream.write(`[evalgate swarm] starting agent: ${cmd} ${safeArgs}\n`);
 	logStream.write(`[evalgate swarm] cwd: ${cwd}\n`);
 	logStream.write(`[evalgate swarm] ts: ${new Date().toISOString()}\n\n`);
 
