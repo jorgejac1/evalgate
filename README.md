@@ -5,7 +5,7 @@
 
 [![MIT](https://img.shields.io/badge/license-MIT-green.svg)](./LICENSE)
 [![Node 18+](https://img.shields.io/badge/node-18%2B-blue.svg)](#)
-[![v0.12.0](https://img.shields.io/badge/version-v0.12.0-brightgreen.svg)](#roadmap)
+[![v0.13.0](https://img.shields.io/badge/version-v0.13.0-brightgreen.svg)](#roadmap)
 
 ---
 
@@ -596,11 +596,9 @@ evalgate check todo.md || echo "Contracts failed — review before merging."
 | v0.10 | Export swarm/worktree/spawn APIs for orchestrator consumers, `retryWorker` with failure-context injection | Shipped |
 | v0.11 | MCP named workspaces — expose multiple `todo.md` files as a single MCP server with workspace routing | Shipped |
 | v0.12 | Structured swarm events — `"eval-result"`, `"cost"`, `"task-complete"` typed events on `swarmEvents`; `SwarmEvent` discriminated union exported | Shipped |
-
-**Up next:**
-- `--watch` mode for continuous re-checking on file save
-- Semantic-diff verifier kind (assert structural changes, not just exit codes)
-- Vector-indexed template memory for smarter `suggest` results
+| v0.13 | Re-check watch mode — `evalgate check --watch` re-runs failing contracts on file change; TDD inner loop for agents | Shipped |
+| v0.14 | Semantic-diff verifier — `eval.diff` kind: assert a structural change happened in a file (pattern/hash-based, zero deps) | Planned |
+| v1.0 | API stability declaration — stable public surface, migration guide v0.x → v1.0, coordinated with conductor v1.0 | Planned |
 
 ---
 

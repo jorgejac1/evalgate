@@ -46,7 +46,7 @@ function looksLikeFailure(s: string): boolean {
 	return /\b(error|fail(ed)?|expected|assertion|✖|✗|throws?)\b/i.test(s);
 }
 
-async function cmdCheck(todoPath: string): Promise<number> {
+async function cmdCheck(todoPath: string, watchFlag = false): Promise<number> {
 	if (!existsSync(todoPath)) {
 		console.error(`${C.red}evalgate: file not found: ${todoPath}${C.reset}`);
 		return 1;
@@ -89,8 +89,8 @@ async function cmdCheck(todoPath: string): Promise<number> {
 			// runners emit failures on stdout (TAP) while others use stderr.
 			const stderr = result.stderr.trim();
 			const stdout = result.stdout.trim();
-			const source = looksLikeFailure(stderr) ? stderr : stdout || stderr;
-			const tail = source.split("\n").slice(-20);
+			const failSource = looksLikeFailure(stderr) ? stderr : stdout || stderr;
+			const tail = failSource.split("\n").slice(-20);
 			for (const l of tail) {
 				console.log(`    ${C.dim}│${C.reset} ${l}`);
 			}
@@ -105,6 +105,54 @@ async function cmdCheck(todoPath: string): Promise<number> {
 	console.log(
 		`\n${C.bold}Summary:${C.reset} ${C.green}${passed} passed${C.reset}, ${failed > 0 ? C.red : C.dim}${failed} failed${C.reset}`,
 	);
+
+	if (watchFlag) {
+		const failedIds = new Set(results.filter((r) => !r.passed).map((r) => r.contract.id));
+
+		if (failedIds.size === 0) {
+			// All passed on the first run — nothing to watch
+			return 0;
+		}
+
+		console.log(`\nWatching for changes... (Ctrl+C to stop)\n`);
+
+		const { startCheckWatch } = await import("./check-watch.js");
+		const resolvedTodoPath = resolve(todoPath);
+
+		return new Promise<number>((resolvePromise) => {
+			const handle = startCheckWatch({
+				todoPath: resolvedTodoPath,
+				failedIds,
+				cwd,
+				onCycle(cycleResults) {
+					for (const r of cycleResults) {
+						const icon = r.passed ? "✓" : "✗";
+						const color = r.passed ? C.green : C.red;
+						console.log(
+							`  ${color}${icon}${C.reset} ${r.contract.title} ${C.dim}(${r.durationMs}ms)${C.reset}`,
+						);
+					}
+					if (failedIds.size === 0) {
+						console.log(`\n${C.green}All contracts passed.${C.reset}\n`);
+					}
+				},
+			});
+
+			// Auto-exit when the watcher stops itself (all passed)
+			const origStop = handle.stop.bind(handle);
+			handle.stop = () => {
+				origStop();
+				resolvePromise(failedIds.size === 0 ? 0 : 1);
+			};
+
+			function shutdown() {
+				handle.stop();
+			}
+
+			process.once("SIGINT", shutdown);
+			process.once("SIGTERM", shutdown);
+		});
+	}
 
 	return failed > 0 ? 1 : 0;
 }
@@ -773,7 +821,7 @@ function usage(): void {
 ${C.bold}evalgate${C.reset} — eval-gated todos for agents
 
 ${C.bold}USAGE${C.reset}
-  evalgate check  [path]              Run verifiers on pending contracts
+  evalgate check  [path] [--watch]    Run verifiers; --watch re-checks on file change
   evalgate list   [path]              List contracts and their status
   evalgate retry  <id> [path]         Rerun a contract with last failure context
   evalgate log    [path] [--contract=<id>] [--failed] [--limit=N]
@@ -813,8 +861,11 @@ async function main(): Promise<void> {
 	let exitCode = 0;
 	switch (cmd) {
 		case "check": {
-			const todoPath = args[0] ?? "todo.md";
-			exitCode = await cmdCheck(todoPath);
+			const positional = args.filter((a) => !a.startsWith("--"));
+			const todoPath = positional[0] ?? "todo.md";
+			const watchMode = args.includes("--watch");
+			exitCode = await cmdCheck(todoPath, watchMode);
+			if (watchMode) return; // watch loop handles process lifetime
 			break;
 		}
 		case "list": {

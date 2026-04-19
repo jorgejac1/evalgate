@@ -5,8 +5,8 @@
  * stdout+stderr to a log file. The process runs to completion; the resolved
  * value is the exit code.
  *
- * The default command is `claude --headless --print "<task>"` which sends the
- * task title as the first user message to Claude Code in headless mode.
+ * The default command is `claude --print "<task>"` which sends the
+ * task title as the first user message to Claude Code in non-interactive mode.
  * Override with agentCmd/agentArgs for testing or alternative agents.
  *
  * Zero runtime dependencies — uses Node built-ins only.
@@ -25,7 +25,7 @@ export interface SpawnOpts {
 	logPath: string;
 	/** Agent executable. Defaults to "claude". */
 	agentCmd?: string;
-	/** Full arg list. Defaults to ["--headless", "--print", task]. */
+	/** Full arg list. Defaults to ["--print", task]. */
 	agentArgs?: string[];
 	/**
 	 * Additional environment variables to merge into the agent process env.
@@ -41,7 +41,7 @@ export interface SpawnOpts {
 export async function spawnAgent(opts: SpawnOpts): Promise<number> {
 	const { cwd, task, logPath } = opts;
 	const cmd = opts.agentCmd ?? "claude";
-	const args = opts.agentArgs ?? ["--headless", "--print", task];
+	const args = opts.agentArgs ?? ["--print", task];
 
 	mkdirSync(dirname(logPath), { recursive: true });
 	const logStream = createWriteStream(logPath, { flags: "a" });

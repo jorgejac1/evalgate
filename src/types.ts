@@ -112,7 +112,14 @@ export interface RunResult {
 // Durable event log types (v0.4)
 // ---------------------------------------------------------------------------
 
-export type TriggerSource = "manual" | "schedule" | "watch" | "webhook" | "mcp" | "retry";
+export type TriggerSource =
+	| "manual"
+	| "schedule"
+	| "watch"
+	| "webhook"
+	| "mcp"
+	| "retry"
+	| "check-watch";
 
 /** A single persisted run entry written to .evalgate/runs.ndjson */
 export interface RunRecord {

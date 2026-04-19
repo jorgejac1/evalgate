@@ -4,6 +4,8 @@ export {
 	queryBudgetRecords,
 	reportTokenUsage,
 } from "./budget.js";
+export type { CheckWatchHandle, CheckWatchOptions } from "./check-watch.js";
+export { startCheckWatch } from "./check-watch.js";
 export { matchesCron, nextFireMs, parseCron } from "./cron.js";
 export { startDash } from "./dash.js";
 export { appendRun, getLastFailure, getLastRun, onRun, queryRuns } from "./log.js";
