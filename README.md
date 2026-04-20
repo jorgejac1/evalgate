@@ -613,6 +613,10 @@ evalgate check todo.md || echo "Contracts failed — review before merging."
 | v0.13 | Re-check watch mode — `evalgate check --watch` re-runs failing contracts on file change; TDD inner loop for agents | Shipped |
 | v0.14 | Semantic-diff verifier — `eval.diff` kind: assert a structural change happened in a file (pattern/hash-based, zero deps) | Shipped |
 | v1.0 | API stability declaration — stable public surface, `VERSION` export, coordinated with conductor v1.0. Agent-agnostic context injection (`taskContext` on `SpawnOpts`/`SwarmOptions`), `{task}` placeholder in `agentArgs` for non-Claude CLIs, concurrent merge fix (mutex serializes commit+merge to eliminate `todo.md` conflicts at any concurrency) | Shipped |
+| v2.0 | Repo-level merge mutex, `-X theirs` conflict resolution, `DiffVerifier`, `VERSION` re-export | Shipped |
+| v2.1 | `FailureKind` typed errors (`worktree-create`, `agent-crash`, `agent-timeout`, `verifier-fail`, `verifier-timeout`, `merge-conflict`), `failureKind` on `WorkerState` + `TaskCompleteEvent`, agent timeout (`agentTimeoutMs` on `SpawnOpts`), verifier timeouts (shell + LLM + composite aggregate `timeoutMs`), `"worker-start"` + `"worker-retry"` events on `swarmEvents` | Shipped |
+| v2.2 | Eval type expansion — `eval.http:` (HTTP health check, uses built-in `fetch`), `eval.schema:` (JSON schema validation), conditional retry (`retry-if: exit-code > 1`) | Planned |
+| v2.3 | Plugin hooks + Resume API — `onWorkerStart` / `onWorkerComplete` hooks in `SwarmOptions`, `resumeSwarm(stateFile)` as clean public API | Planned |
 
 ---
 
