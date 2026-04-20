@@ -26,11 +26,14 @@ test("composite verifier respects aggregate timeoutMs and sets timedOut=true", a
 		verifier: {
 			kind: "composite",
 			mode: "all",
-			// Each step would take 5 s normally; aggregate budget is 200 ms.
-			timeoutMs: 200,
+			// Each step would take 30 s normally; aggregate budget is 300 ms.
+			// Using node instead of sleep — sleep ignores SIGTERM on some Linux
+			// environments (GitHub Actions), so the process runs to completion.
+			// Node responds to SIGTERM reliably cross-platform.
+			timeoutMs: 300,
 			steps: [
-				{ kind: "shell", command: "sleep 5", timeoutMs: 10_000 },
-				{ kind: "shell", command: "true", timeoutMs: 10_000 },
+				{ kind: "shell", command: 'node -e "setTimeout(()=>{},30000)"', timeoutMs: 10_000 },
+				{ kind: "shell", command: 'node -e "process.exit(0)"', timeoutMs: 10_000 },
 			],
 		},
 	});
@@ -63,11 +66,12 @@ test("composite verifier passes when all steps finish within timeout", async () 
 });
 
 test("shell verifier propagates timedOut=true through RunResult", async () => {
+	// node responds to SIGTERM reliably; sleep ignores it on some Linux envs.
 	const contract = makeContract({
 		verifier: {
 			kind: "shell",
-			command: "sleep 10",
-			timeoutMs: 100,
+			command: 'node -e "setTimeout(()=>{},30000)"',
+			timeoutMs: 150,
 		},
 	});
 
