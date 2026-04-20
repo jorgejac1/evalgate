@@ -69,6 +69,7 @@ export type {
 } from "./types.js";
 export { startUiServer } from "./ui.js";
 export { runContract, runShell } from "./verifier.js";
+export { VERSION } from "./version.js";
 export { matchesGlob, startWatcher } from "./watcher.js";
 export {
 	createWorktree,

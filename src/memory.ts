@@ -9,15 +9,12 @@
  */
 
 import { existsSync, readFileSync } from "node:fs";
-import { createRequire } from "node:module";
 import { getBudgetSummary } from "./budget.js";
-
-const _require = createRequire(import.meta.url);
-
 import { queryRuns } from "./log.js";
 import { listMessages } from "./messages.js";
 import { parseTodo } from "./parser.js";
 import type { Contract, RunRecord } from "./types.js";
+import { VERSION } from "./version.js";
 
 // ---------------------------------------------------------------------------
 // Trigram similarity (Jaccard over 3-char n-grams)
@@ -225,7 +222,7 @@ export function exportSnapshot(todoPath: string): ProjectSnapshot {
 	return {
 		exportedAt: new Date().toISOString(),
 		todoPath,
-		version: _require("../package.json").version as string,
+		version: VERSION,
 		contracts,
 		runs,
 		budget,

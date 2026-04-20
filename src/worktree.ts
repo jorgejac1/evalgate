@@ -44,9 +44,23 @@ export function createWorktree(repoRoot: string, branch: string, worktreePath: s
 /**
  * Merges `branch` into the current branch of the repo at `repoRoot`.
  * Uses --no-edit so it never opens an editor.
+ *
+ * Aborts any in-progress merge first — a prior failed run can leave MERGE_HEAD
+ * behind, which makes git refuse to start a new merge. This is safe to call
+ * inside the swarm mutex because no other worker is touching the repo at the
+ * same time.
  */
 export function mergeWorktree(repoRoot: string, branch: string): void {
-	git(`merge --no-edit "${branch}"`, repoRoot);
+	try {
+		git("merge --abort", repoRoot);
+	} catch {
+		// No merge in progress — expected case, ignore.
+	}
+	// -X theirs: when conflicts arise, prefer the worker branch's version.
+	// This is safe because inside the mutex each worker re-reads the latest
+	// main-branch todo.md before committing, so the worker branch is always
+	// a strict superset of what is already on main.
+	git(`merge --no-edit -X theirs "${branch}"`, repoRoot);
 }
 
 /**

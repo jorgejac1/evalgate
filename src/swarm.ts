@@ -117,6 +117,22 @@ class Mutex {
 	}
 }
 
+/**
+ * One Mutex per repo root — shared across all concurrent swarm runs that
+ * operate on the same git repository. This prevents cross-track merge
+ * conflicts when multiple tracks are run simultaneously in the same repo.
+ */
+const repoMutexes = new Map<string, Mutex>();
+
+function getRepoMutex(repoRoot: string): Mutex {
+	let m = repoMutexes.get(repoRoot);
+	if (!m) {
+		m = new Mutex();
+		repoMutexes.set(repoRoot, m);
+	}
+	return m;
+}
+
 function workerLogPath(todoPath: string, workerId: string): string {
 	return join(dirname(todoPath), ".evalgate", "sessions", `${workerId}.log`);
 }
@@ -458,9 +474,9 @@ export async function runSwarm(opts: SwarmOptions): Promise<SwarmResult> {
 	const pending = state.workers.filter((w) => w.status === "pending");
 	const contractMap = new Map(contracts.map((c) => [c.id, c]));
 
-	// One mutex per swarm run — serializes the commit+merge phase so concurrent
-	// workers don't produce add/add conflicts on todo.md.
-	const mergeMutex = new Mutex();
+	// One mutex per repo root — shared across all tracks in the same repo so
+	// concurrent swarm runs don't race on git merge.
+	const mergeMutex = getRepoMutex(repoRoot);
 
 	let done = 0;
 	let failed = 0;

@@ -6,7 +6,6 @@
  * All debug/log output goes to stderr so it never pollutes the protocol stream.
  */
 
-import { createRequire } from "node:module";
 import { createInterface } from "node:readline";
 import {
 	handleCheckAll,
@@ -29,9 +28,7 @@ import {
 } from "./mcp/handlers.js";
 import { TOOLS } from "./mcp/tools.js";
 import type { McpJsonRpcRequest, McpJsonRpcResponse } from "./types.js";
-
-const _require = createRequire(import.meta.url);
-const VERSION: string = (_require("../package.json") as { version: string }).version;
+import { VERSION } from "./version.js";
 
 // ---------------------------------------------------------------------------
 // Options
