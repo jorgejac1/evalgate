@@ -1,4 +1,5 @@
 export {
+	estimateUsd,
 	getBudgetSummary,
 	getTotalTokens,
 	queryBudgetRecords,
@@ -8,6 +9,7 @@ export type { CheckWatchHandle, CheckWatchOptions } from "./check-watch.js";
 export { startCheckWatch } from "./check-watch.js";
 export { matchesCron, nextFireMs, parseCron } from "./cron.js";
 export { startDash } from "./dash.js";
+export type { QueryOptions } from "./log.js";
 export { appendRun, getLastFailure, getLastRun, onRun, queryRuns } from "./log.js";
 export type { McpServerOptions } from "./mcp.js";
 export { startMcpServer } from "./mcp.js";
@@ -30,11 +32,12 @@ export { parseTodo } from "./parser.js";
 export type { SpawnOpts } from "./spawn.js";
 export { spawnAgent } from "./spawn.js";
 export type { SwarmOptions, SwarmResult } from "./swarm.js";
-export { retryWorker, runSwarm, swarmEvents } from "./swarm.js";
+export { resumeSwarm, retryWorker, runSwarm, swarmEvents } from "./swarm.js";
 export { loadState, saveState, updateWorker } from "./swarm-state.js";
 export * as telegram from "./telegram.js";
 export type {
 	AgentMessage,
+	BudgetExceededEvent,
 	BudgetRecord,
 	CompositeVerifier,
 	Contract,

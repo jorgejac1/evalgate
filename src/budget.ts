@@ -13,7 +13,7 @@ import { join } from "node:path";
 import { logDir } from "./log.js";
 import { sendMessage } from "./messages.js";
 import { swarmEvents } from "./swarm.js";
-import type { BudgetRecord, Contract, CostEvent } from "./types.js";
+import type { BudgetExceededEvent, BudgetRecord, Contract, CostEvent } from "./types.js";
 
 // ---------------------------------------------------------------------------
 // Path helper
@@ -29,12 +29,26 @@ function ensureDir(todoPath: string): void {
 }
 
 // ---------------------------------------------------------------------------
-// Cost estimation (Sonnet 4 pricing as default; named "estimated" intentionally)
+// Cost estimation — exported so consumers (e.g. conductor) avoid hardcoding rates
 // ---------------------------------------------------------------------------
 
-function estimateCost(input: number, output: number): number {
-	// Sonnet 4: $3/MTok input, $15/MTok output
-	return (input * 3 + output * 15) / 1_000_000;
+const PRICING = {
+	sonnet4: { input: 3, output: 15 },
+	haiku4: { input: 0.8, output: 4 },
+	opus4: { input: 15, output: 75 },
+} as const;
+
+/**
+ * Estimate cost in USD given token counts and optional model.
+ * Defaults to Sonnet 4 rates ($3/$15 per MTok in/out).
+ */
+export function estimateUsd(
+	inputTokens: number,
+	outputTokens: number,
+	model: keyof typeof PRICING = "sonnet4",
+): number {
+	const { input, output } = PRICING[model];
+	return (inputTokens * input + outputTokens * output) / 1_000_000;
 }
 
 // ---------------------------------------------------------------------------
@@ -61,19 +75,20 @@ export function reportTokenUsage(
 	ensureDir(todoPath);
 	appendFileSync(budgetPath(todoPath), `${JSON.stringify(record)}\n`, "utf8");
 
+	const inputTok = opts?.inputTokens ?? 0;
+	const outputTok = opts?.outputTokens ?? 0;
+	const estimatedUsd = estimateUsd(inputTok, outputTok);
+
 	// Emit structured cost event (v0.12)
 	swarmEvents.emit("cost", {
 		type: "cost",
 		workerId: opts?.workerId ?? "",
 		contractId,
-		tokens: {
-			input: opts?.inputTokens ?? 0,
-			output: opts?.outputTokens ?? 0,
-		},
-		estimatedUsd: estimateCost(opts?.inputTokens ?? 0, opts?.outputTokens ?? 0),
+		tokens: { input: inputTok, output: outputTok },
+		estimatedUsd,
 	} satisfies CostEvent);
 
-	// Auto-emit a budget_exceeded message if this pushes the contract over its limit
+	// Auto-emit a budget_exceeded message and swarm event if this crosses the contract limit
 	if (contract?.budget) {
 		const total = getTotalTokens(todoPath, contractId);
 		if (total > contract.budget) {
@@ -89,6 +104,14 @@ export function reportTokenUsage(
 					overBy: total - contract.budget,
 				},
 			});
+			swarmEvents.emit("budget-exceeded", {
+				type: "budget-exceeded",
+				todoPath,
+				contractId,
+				totalTokens: total,
+				estimatedUsd: estimateUsd(total, 0),
+				budget: contract.budget,
+			} satisfies BudgetExceededEvent);
 		}
 	}
 

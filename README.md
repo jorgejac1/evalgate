@@ -5,7 +5,7 @@
 
 [![MIT](https://img.shields.io/badge/license-MIT-green.svg)](./LICENSE)
 [![Node 18+](https://img.shields.io/badge/node-18%2B-blue.svg)](#)
-[![v1.0.0](https://img.shields.io/badge/version-v1.0.0-brightgreen.svg)](#roadmap)
+[![v2.3.0](https://img.shields.io/badge/version-v2.3.0-brightgreen.svg)](#roadmap)
 
 ---
 
@@ -596,6 +596,64 @@ NDJSON format — human-readable, grep-friendly, no database required.
 
 ---
 
+## Swarm hooks (v2.3+)
+
+`runSwarm` accepts optional inline callbacks alongside the existing `swarmEvents` emitter. Hooks fire per-worker and are useful for orchestrators that need inline reactions without setting up a global listener.
+
+```ts
+import { runSwarm, estimateUsd } from "evalgate";
+import type { BudgetExceededEvent } from "evalgate";
+
+const controller = new AbortController();
+
+await runSwarm({
+  todoPath: ".evalgate/todo.md",
+  concurrency: 4,
+
+  // Called when a worker starts; worker.id / worker.contractTitle are populated.
+  onWorkerStart(worker) {
+    console.log(`→ started ${worker.contractTitle}`);
+  },
+
+  // Called when a worker reaches a terminal state (done / failed / timeout).
+  onWorkerComplete(worker, { status, failureKind }) {
+    console.log(`← ${status} ${worker.contractTitle}${failureKind ? ` (${failureKind})` : ""}`);
+  },
+
+  // Called when a contract's cumulative spend crosses its declared budget.
+  // Abort the controller here to stop spawning new workers.
+  onBudgetExceeded(evt: BudgetExceededEvent) {
+    console.warn(`budget exceeded: ${evt.totalTokens} tok / $${evt.estimatedUsd.toFixed(4)}`);
+    controller.abort();
+  },
+
+  // Pass an AbortSignal to stop new-worker spawning without killing in-flight workers.
+  // In-flight workers run to completion (or their agentTimeoutMs).
+  signal: controller.signal,
+});
+```
+
+`resumeSwarm` is a thin convenience wrapper that picks up pending workers from a prior run:
+
+```ts
+import { resumeSwarm } from "evalgate";
+
+// stateFile is the path to .evalgate/swarm-state.json
+await resumeSwarm(".evalgate/swarm-state.json", { concurrency: 2 });
+```
+
+`estimateUsd` replaces hardcoded pricing math in downstream consumers:
+
+```ts
+import { estimateUsd } from "evalgate";
+
+const usd = estimateUsd(inputTokens, outputTokens);            // default: sonnet4 rates
+const usd2 = estimateUsd(inputTokens, outputTokens, "opus4");  // opus4 rates
+const usd3 = estimateUsd(inputTokens, outputTokens, "haiku4"); // haiku4 rates
+```
+
+---
+
 ## Programmatic API
 
 ```ts
@@ -619,10 +677,14 @@ Full export surface:
 // Core
 import { parseTodo, runContract, runShell, updateTodo } from "evalgate";
 
+// Swarm orchestration
+import { runSwarm, resumeSwarm, retryWorker, loadState, swarmEvents } from "evalgate";
+import type { SwarmOptions, SwarmResult, SwarmState, SwarmEvent, BudgetExceededEvent } from "evalgate";
+
 // Persistence
 import { appendRun, queryRuns, getLastFailure, getLastRun, onRun } from "evalgate";
 import { sendMessage, listMessages } from "evalgate";
-import { reportTokenUsage, queryBudgetRecords, getTotalTokens, getBudgetSummary } from "evalgate";
+import { reportTokenUsage, queryBudgetRecords, getTotalTokens, getBudgetSummary, estimateUsd } from "evalgate";
 
 // Memory + analysis
 import { suggest, detectPatterns, exportSnapshot, snapshotToMarkdown, diffSnapshots, diffToMarkdown } from "evalgate";
@@ -679,7 +741,7 @@ evalgate check todo.md || echo "Contracts failed — review before merging."
 | v2.0 | Repo-level merge mutex, `-X theirs` conflict resolution, `DiffVerifier`, `VERSION` re-export | Shipped |
 | v2.1 | `FailureKind` typed errors (`worktree-create`, `agent-crash`, `agent-timeout`, `verifier-fail`, `verifier-timeout`, `merge-conflict`), `failureKind` on `WorkerState` + `TaskCompleteEvent`, agent timeout (`agentTimeoutMs` on `SpawnOpts`), verifier timeouts (shell + LLM + composite aggregate `timeoutMs`), `"worker-start"` + `"worker-retry"` events on `swarmEvents` | Shipped |
 | v2.2 | Eval type expansion — `eval.http:` (HTTP health check, uses built-in `fetch`), `eval.schema:` (JSON schema validation), conditional retry (`retry-if: exit-code > 1`) | Shipped |
-| v2.3 | Plugin hooks + Resume API — `onWorkerStart` / `onWorkerComplete` hooks in `SwarmOptions`, `resumeSwarm(stateFile)` as clean public API | Planned |
+| v2.3 | Plugin hooks + Resume API — `onWorkerStart` / `onWorkerComplete` / `onBudgetExceeded` hooks in `SwarmOptions`; `AbortSignal` support (`signal` option stops new-worker spawning cleanly); `resumeSwarm(stateFile)` public API; `estimateUsd(input, output, model?)` replaces hardcoded pricing math; log pagination (`offset`, `from`, `to` on `queryRuns`) | Shipped |
 
 ---
 
@@ -691,7 +753,7 @@ As of v1.0.0 the public API surface exported from `evalgate` (`src/index.ts`) is
 - New exports are added in minor releases
 - Bug fixes ship as patches
 
-**Stable public exports:** `runSwarm`, `retryWorker`, `swarmEvents`, `parseTodo`, `runContract`, `runShell`, `budget.*`, `log.*`, `telegram.*`, `startMcpServer`, `startCheckWatch`, `parseCron`, `matchesCron`, `nextFireMs`, `worktree.*`, and all exported types from `types.ts`
+**Stable public exports:** `runSwarm`, `resumeSwarm`, `retryWorker`, `swarmEvents`, `estimateUsd`, `parseTodo`, `runContract`, `runShell`, `budget.*`, `log.*`, `telegram.*`, `startMcpServer`, `startCheckWatch`, `parseCron`, `matchesCron`, `nextFireMs`, `worktree.*`, and all exported types from `types.ts`
 
 **Also exported:** `VERSION` — the current package version as a string, useful for downstream consumers that want to display or validate the evalgate version.
 

@@ -89,6 +89,12 @@ export interface QueryOptions {
 	passed?: boolean;
 	trigger?: TriggerSource;
 	limit?: number;
+	/** Skip the first N results after filtering (for pagination). */
+	offset?: number;
+	/** ISO 8601 date — include only records at or after this timestamp. */
+	from?: string;
+	/** ISO 8601 date — include only records at or before this timestamp. */
+	to?: string;
 }
 
 export function queryRuns(todoPath: string, opts: QueryOptions = {}): RunRecord[] {
@@ -117,10 +123,21 @@ export function queryRuns(todoPath: string, opts: QueryOptions = {}): RunRecord[
 	if (opts.trigger !== undefined) {
 		filtered = filtered.filter((r) => r.trigger === opts.trigger);
 	}
+	if (opts.from !== undefined) {
+		const from = opts.from;
+		filtered = filtered.filter((r) => r.ts >= from);
+	}
+	if (opts.to !== undefined) {
+		const to = opts.to;
+		filtered = filtered.filter((r) => r.ts <= to);
+	}
 
 	// Most recent first
 	filtered.reverse();
 
+	if (opts.offset !== undefined && opts.offset > 0) {
+		filtered = filtered.slice(opts.offset);
+	}
 	if (opts.limit !== undefined && opts.limit > 0) {
 		filtered = filtered.slice(0, opts.limit);
 	}

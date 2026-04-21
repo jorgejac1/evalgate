@@ -316,13 +316,25 @@ export interface WorkerRetryEvent {
 	contractId: string;
 }
 
+/** Emitted on swarmEvents when cumulative token spend exceeds a contract's budget (v2.3+). */
+export interface BudgetExceededEvent {
+	type: "budget-exceeded";
+	todoPath: string;
+	contractId?: string;
+	totalTokens: number;
+	estimatedUsd: number;
+	/** Per-contract token budget, if the breach was at the contract level. */
+	budget?: number;
+}
+
 /** Discriminated union of all structured swarm events (v0.12+). */
 export type SwarmEvent =
 	| EvalResultEvent
 	| CostEvent
 	| TaskCompleteEvent
 	| WorkerStartEvent
-	| WorkerRetryEvent;
+	| WorkerRetryEvent
+	| BudgetExceededEvent;
 
 // ---------------------------------------------------------------------------
 // MCP protocol types (v0.2)

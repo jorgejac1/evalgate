@@ -26,6 +26,7 @@ import { parseTodo } from "./parser.js";
 import { spawnAgent } from "./spawn.js";
 import { loadState, saveState, updateWorker } from "./swarm-state.js";
 import type {
+	BudgetExceededEvent,
 	Contract,
 	EvalResultEvent,
 	FailureKind,
@@ -73,6 +74,34 @@ export interface SwarmOptions {
 	 * Use {task} in agentArgs to reference the full prompt (context + title).
 	 */
 	taskContext?: string;
+	/**
+	 * Abort signal — when aborted, stops spawning new workers after the current
+	 * batch completes. In-flight workers run to completion (or to agentTimeoutMs).
+	 * Abort granularity is one batch; remaining pending workers stay in "pending"
+	 * state so resumeSwarm() can pick them up.
+	 */
+	signal?: AbortSignal;
+	/**
+	 * Called after a worker transitions to "spawning". Fired after the swarmEvents
+	 * "worker-start" event so existing listeners are unaffected.
+	 * Exceptions thrown here are swallowed and do not affect the worker.
+	 */
+	onWorkerStart?: (worker: WorkerState) => void | Promise<void>;
+	/**
+	 * Called after a worker reaches a terminal state ("done" or "failed"). Fired
+	 * after both the swarmEvents "task-complete" event and disk state update.
+	 * Exceptions thrown here are swallowed and do not affect the worker.
+	 */
+	onWorkerComplete?: (
+		worker: WorkerState,
+		result: { status: "done" | "failed"; failureKind?: FailureKind },
+	) => void | Promise<void>;
+	/**
+	 * Called when cumulative token spend crosses a contract budget. Wired to the
+	 * "budget-exceeded" swarmEvent; useful for aborting the swarm inline.
+	 * Exceptions thrown here are swallowed.
+	 */
+	onBudgetExceeded?: (evt: BudgetExceededEvent) => void | Promise<void>;
 }
 
 export interface SwarmResult {
@@ -192,6 +221,26 @@ async function runWorker(
 		workerId: worker.id,
 		contractId: contract.id,
 	} satisfies WorkerStartEvent);
+	if (opts.onWorkerStart) {
+		try {
+			await opts.onWorkerStart(
+				loadState(todoPath)?.workers.find((w) => w.id === worker.id) ?? worker,
+			);
+		} catch {
+			/* consumer exceptions must not abort the worker */
+		}
+	}
+
+	// Fires after emitWorker + emitTaskComplete so disk state is already final.
+	async function fireComplete(status: "done" | "failed", failureKind?: FailureKind): Promise<void> {
+		if (!opts.onWorkerComplete) return;
+		try {
+			const fresh = loadState(todoPath)?.workers.find((w) => w.id === worker.id) ?? worker;
+			await opts.onWorkerComplete(fresh, { status, failureKind });
+		} catch {
+			/* consumer exceptions must not affect the worker result */
+		}
+	}
 
 	try {
 		createWorktree(repoRoot, worker.branch, worker.worktreePath);
@@ -203,6 +252,7 @@ async function runWorker(
 			failureKind: "worktree-create",
 		});
 		emitTaskComplete(worker.id, contract.id, "failed", "worktree-create");
+		await fireComplete("failed", "worktree-create");
 		return;
 	}
 
@@ -232,6 +282,7 @@ async function runWorker(
 			failureKind: "agent-timeout",
 		});
 		emitTaskComplete(worker.id, contract.id, "failed", "agent-timeout");
+		await fireComplete("failed", "agent-timeout");
 		return;
 	}
 
@@ -261,6 +312,7 @@ async function runWorker(
 			failureKind: verifierFailureKind,
 		});
 		emitTaskComplete(worker.id, contract.id, "failed", verifierFailureKind);
+		await fireComplete("failed", verifierFailureKind);
 		// Mirror FAIL to canonical todoPath — eval definitively failed, record it now.
 		appendRun(result, todoPath, "swarm");
 		return;
@@ -311,6 +363,7 @@ async function runWorker(
 			failureKind: "merge-conflict",
 		});
 		emitTaskComplete(worker.id, contract.id, "failed", "merge-conflict");
+		await fireComplete("failed", "merge-conflict");
 		return;
 	} finally {
 		if (mergeMutex) mergeMutex.release();
@@ -322,6 +375,7 @@ async function runWorker(
 
 	emitWorker(todoPath, worker.id, "done", { finishedAt: now() });
 	emitTaskComplete(worker.id, contract.id, "done");
+	await fireComplete("done");
 	// Mirror PASS to canonical todoPath — only after successful merge.
 	appendRun(result, todoPath, "swarm");
 }
@@ -556,26 +610,82 @@ export async function runSwarm(opts: SwarmOptions): Promise<SwarmResult> {
 	let failed = 0;
 	let skipped = 0;
 
-	for (let i = 0; i < pending.length; i += concurrency) {
-		const batch = pending.slice(i, i + concurrency);
-		await Promise.allSettled(
-			batch.map(async (worker) => {
-				const contract = contractMap.get(worker.contractId);
-				if (!contract) {
-					skipped++;
-					return;
-				}
-				await runWorker(worker, contract, todoPath, repoRoot, opts, undefined, mergeMutex);
-				// Read fresh state to get the actual final status.
-				const fresh = loadState(todoPath);
-				const w = fresh?.workers.find((x) => x.id === worker.id);
-				if (w?.status === "done") done++;
-				else if (w?.status === "failed") failed++;
-			}),
-		);
+	// Wire onBudgetExceeded to swarmEvents so it fires for any contract breach
+	// that occurs during this run, regardless of which worker triggers it.
+	let budgetHandler: ((evt: BudgetExceededEvent) => void) | undefined;
+	if (opts.onBudgetExceeded) {
+		budgetHandler = (evt: BudgetExceededEvent) => {
+			try {
+				void opts.onBudgetExceeded?.(evt);
+			} catch {
+				/* swallow */
+			}
+		};
+		swarmEvents.on("budget-exceeded", budgetHandler);
+	}
+
+	try {
+		for (let i = 0; i < pending.length; i += concurrency) {
+			// Respect an incoming abort signal — stop spawning new batches.
+			// In-flight workers in the current batch will finish naturally.
+			// Remaining workers stay "pending" so resumeSwarm() can continue.
+			if (opts.signal?.aborted) break;
+
+			const batch = pending.slice(i, i + concurrency);
+			await Promise.allSettled(
+				batch.map(async (worker) => {
+					const contract = contractMap.get(worker.contractId);
+					if (!contract) {
+						skipped++;
+						return;
+					}
+					await runWorker(worker, contract, todoPath, repoRoot, opts, undefined, mergeMutex);
+					// Read fresh state to get the actual final status.
+					const fresh = loadState(todoPath);
+					const w = fresh?.workers.find((x) => x.id === worker.id);
+					if (w?.status === "done") done++;
+					else if (w?.status === "failed") failed++;
+				}),
+			);
+		}
+	} finally {
+		if (budgetHandler) swarmEvents.off("budget-exceeded", budgetHandler);
 	}
 
 	const finalState = loadState(todoPath) ?? state;
 	swarmEvents.emit("state", finalState);
 	return { done, failed, skipped, state: finalState };
+}
+
+// ---------------------------------------------------------------------------
+// Convenience entry point for resuming an interrupted run
+// ---------------------------------------------------------------------------
+
+/**
+ * Resume a previously interrupted swarm run from its persisted state file or
+ * todo path. Equivalent to runSwarm({ ...opts, todoPath, resume: true }).
+ *
+ * @param todoPath - Path to the todo.md (or its sibling swarm-state.json —
+ *   the function resolves both forms automatically).
+ * @param opts - Partial SwarmOptions merged with the resolved todoPath.
+ *   resume is forced to true; any other options override defaults.
+ * @throws if no prior swarm state exists for the given path.
+ */
+export async function resumeSwarm(
+	todoPath: string,
+	opts: Partial<Omit<SwarmOptions, "todoPath" | "resume">> = {},
+): Promise<SwarmResult> {
+	const resolved = resolvePath(
+		todoPath.endsWith("swarm-state.json")
+			? todoPath.replace(/\.evalgate[/\\]swarm-state\.json$/, "todo.md")
+			: todoPath,
+	);
+
+	// Validate that prior state exists before delegating to runSwarm.
+	const existing = loadState(resolved);
+	if (!existing) {
+		throw new Error(`resumeSwarm: no prior swarm state found for: ${resolved}`);
+	}
+
+	return runSwarm({ ...opts, todoPath: resolved, resume: true } as SwarmOptions);
 }
