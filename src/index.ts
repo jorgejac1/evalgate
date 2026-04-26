@@ -32,13 +32,14 @@ export { parseTodo } from "./parser.js";
 export type { SpawnOpts } from "./spawn.js";
 export { spawnAgent } from "./spawn.js";
 export type { SwarmOptions, SwarmResult } from "./swarm.js";
-export { resumeSwarm, retryWorker, runSwarm, swarmEvents } from "./swarm.js";
+export { LocalRunner, resumeSwarm, retryWorker, runSwarm, swarmEvents } from "./swarm.js";
 export { loadState, saveState, updateWorker } from "./swarm-state.js";
 export * as telegram from "./telegram.js";
 export type {
 	AgentMessage,
 	BudgetExceededEvent,
 	BudgetRecord,
+	CodeVerifier,
 	CompositeVerifier,
 	Contract,
 	ContractTrigger,
@@ -47,6 +48,7 @@ export type {
 	EvalResultEvent,
 	FailureKind,
 	GatewayConfig,
+	LlmProvider,
 	LlmVerifier,
 	McpCapabilities,
 	McpJsonRpcRequest,
@@ -69,6 +71,8 @@ export type {
 	WatchTrigger,
 	WebhookTrigger,
 	WorkerRetryEvent,
+	WorkerRunner,
+	WorkerRunOpts,
 	WorkerStartEvent,
 	WorkerState,
 	WorkerStatus,

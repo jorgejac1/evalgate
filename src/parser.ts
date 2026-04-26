@@ -1,8 +1,11 @@
 import type {
+	CodeVerifier,
 	Contract,
 	ContractTrigger,
 	DiffVerifier,
 	HttpVerifier,
+	LlmProvider,
+	LlmVerifier,
 	ShellVerifier,
 	Verifier,
 } from "./types.js";
@@ -66,6 +69,7 @@ export function parseTodo(source: string): Contract[] {
 			provider: buildProvider(fields),
 			role: buildRole(fields),
 			mcpServers: buildMcpServers(fields),
+			priority: fields.priority ? parseInt(fields.priority, 10) : undefined,
 			retryIf: buildRetryIf(fields),
 			line: i,
 			rawLines,
@@ -80,7 +84,17 @@ export function parseTodo(source: string): Contract[] {
 function buildVerifier(fields: Record<string, string>): Verifier | undefined {
 	// LLM-judge verifier: eval.llm: <prompt>
 	if (fields["eval.llm"]) {
-		return { kind: "llm", prompt: fields["eval.llm"] };
+		const v: LlmVerifier = { kind: "llm", prompt: fields["eval.llm"] };
+		if (fields["eval.llm.provider"]) {
+			v.provider = fields["eval.llm.provider"] as LlmProvider;
+		}
+		if (fields["eval.llm.model"]) {
+			v.model = fields["eval.llm.model"];
+		}
+		if (fields["eval.llm.baseurl"] ?? fields["eval.llm.base_url"]) {
+			v.baseUrl = fields["eval.llm.baseurl"] ?? fields["eval.llm.base_url"];
+		}
+		return v;
 	}
 
 	// Diff verifier: eval.diff: <file> has|lacks "<pattern>"
@@ -131,6 +145,18 @@ function buildVerifier(fields: Record<string, string>): Verifier | undefined {
 				return { kind: "composite", mode, steps };
 			}
 		}
+	}
+
+	// Code verifier: eval.code: <js-fn-expression>
+	if (fields["eval.code"]) {
+		const v: CodeVerifier = { kind: "code", fn: fields["eval.code"] };
+		if (fields["eval.code.file"]) {
+			v.file = fields["eval.code.file"];
+		}
+		if (fields["eval.code.timeout"]) {
+			v.timeoutMs = parseInt(fields["eval.code.timeout"], 10);
+		}
+		return v;
 	}
 
 	// Shell verifier: eval: <command>

@@ -21,6 +21,7 @@ import { EventEmitter } from "node:events";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve as resolvePath } from "node:path";
+import { reportTokenUsage } from "./budget.js";
 import { appendRun } from "./log.js";
 import { parseTodo } from "./parser.js";
 import { spawnAgent } from "./spawn.js";
@@ -33,6 +34,8 @@ import type {
 	SwarmState,
 	TaskCompleteEvent,
 	WorkerRetryEvent,
+	WorkerRunner,
+	WorkerRunOpts,
 	WorkerStartEvent,
 	WorkerState,
 	WorkerStatus,
@@ -47,6 +50,16 @@ import {
 	removeWorktree,
 } from "./worktree.js";
 import { updateTodo } from "./writer.js";
+
+// ---------------------------------------------------------------------------
+// LocalRunner — default WorkerRunner that wraps spawnAgent
+// ---------------------------------------------------------------------------
+
+export class LocalRunner implements WorkerRunner {
+	async run(opts: WorkerRunOpts): Promise<number> {
+		return spawnAgent(opts);
+	}
+}
 
 // ---------------------------------------------------------------------------
 // Public event emitter — ui.ts subscribes to this for SSE
@@ -102,6 +115,11 @@ export interface SwarmOptions {
 	 * Exceptions thrown here are swallowed.
 	 */
 	onBudgetExceeded?: (evt: BudgetExceededEvent) => void | Promise<void>;
+	/**
+	 * Custom worker runner — defaults to LocalRunner (wraps spawnAgent).
+	 * Provide SSHRunner or DockerRunner from conductor-agents for remote execution.
+	 */
+	runner?: WorkerRunner;
 }
 
 export interface SwarmResult {
@@ -263,7 +281,8 @@ async function runWorker(
 	// ── 2. running ───────────────────────────────────────────────────────────
 	emitWorker(todoPath, worker.id, "running");
 
-	const agentExit = await spawnAgent({
+	const runner = opts.runner ?? new LocalRunner();
+	const agentExit = await runner.run({
 		cwd: worker.worktreePath,
 		task: contract.title,
 		logPath: worker.logPath,
@@ -272,6 +291,33 @@ async function runWorker(
 		taskContext: opts.taskContext,
 		env: extraEnv,
 	});
+
+	// Extract token usage from the log file. When using the default claude args
+	// (--output-format json), the log contains a single {"type":"result",...} line
+	// with usage counts. Best-effort — silently skipped for custom agents that
+	// don't emit this format.
+	try {
+		const logContent = readFileSync(worker.logPath, "utf8");
+		for (const line of logContent.split("\n").reverse()) {
+			if (!line.trim().startsWith("{")) continue;
+			const obj = JSON.parse(line) as Record<string, unknown>;
+			if (obj["type"] === "result") {
+				const usage = obj["usage"] as Record<string, number> | undefined;
+				const input = usage?.["input_tokens"] ?? 0;
+				const output = usage?.["output_tokens"] ?? 0;
+				if (input > 0 || output > 0) {
+					reportTokenUsage(todoPath, worker.contractId, input + output, undefined, {
+						inputTokens: input,
+						outputTokens: output,
+						workerId: worker.id,
+					});
+				}
+				break;
+			}
+		}
+	} catch {
+		// Log not available or non-JSON agent — skip token tracking.
+	}
 
 	// Exit code -2 is the timeout sentinel set by spawnAgent when agentTimeoutMs
 	// is exceeded. Don't proceed to verifier — the agent didn't finish its work.
@@ -598,12 +644,20 @@ export async function runSwarm(opts: SwarmOptions): Promise<SwarmResult> {
 
 	swarmEvents.emit("state", state);
 
-	// ── Process workers with concurrency limit (batch approach) ──────────────
-	const pending = state.workers.filter((w) => w.status === "pending");
+	// ── Process workers with work-stealing pool ──────────────────────────────
 	const contractMap = new Map(contracts.map((c) => [c.id, c]));
+	const allPending = state.workers.filter((w) => w.status === "pending");
 
-	// One mutex per repo root — shared across all tracks in the same repo so
-	// concurrent swarm runs don't race on git merge.
+	// Sort by priority descending — higher priority workers run first.
+	allPending.sort((a, b) => {
+		const pa = contractMap.get(a.contractId)?.priority ?? 0;
+		const pb = contractMap.get(b.contractId)?.priority ?? 0;
+		return pb - pa;
+	});
+
+	// Work-stealing pool: N slots each grab the next pending worker from the queue.
+	// No head-of-line blocking — a slow worker doesn't delay the next batch.
+	const queue = [...allPending];
 	const mergeMutex = getRepoMutex(repoRoot);
 
 	let done = 0;
@@ -625,29 +679,28 @@ export async function runSwarm(opts: SwarmOptions): Promise<SwarmResult> {
 	}
 
 	try {
-		for (let i = 0; i < pending.length; i += concurrency) {
-			// Respect an incoming abort signal — stop spawning new batches.
-			// In-flight workers in the current batch will finish naturally.
-			// Remaining workers stay "pending" so resumeSwarm() can continue.
-			if (opts.signal?.aborted) break;
+		const poolSize = Math.min(concurrency, allPending.length);
 
-			const batch = pending.slice(i, i + concurrency);
-			await Promise.allSettled(
-				batch.map(async (worker) => {
-					const contract = contractMap.get(worker.contractId);
-					if (!contract) {
-						skipped++;
-						return;
-					}
-					await runWorker(worker, contract, todoPath, repoRoot, opts, undefined, mergeMutex);
-					// Read fresh state to get the actual final status.
-					const fresh = loadState(todoPath);
-					const w = fresh?.workers.find((x) => x.id === worker.id);
-					if (w?.status === "done") done++;
-					else if (w?.status === "failed") failed++;
-				}),
-			);
+		async function runSlot(): Promise<void> {
+			while (true) {
+				if (opts.signal?.aborted) break;
+				const worker = queue.shift();
+				if (!worker) break;
+				const contract = contractMap.get(worker.contractId);
+				if (!contract) {
+					skipped++;
+					continue;
+				}
+				await runWorker(worker, contract, todoPath, repoRoot, opts, undefined, mergeMutex);
+				const fresh = loadState(todoPath);
+				const w = fresh?.workers.find((x) => x.id === worker.id);
+				if (w?.status === "done") done++;
+				else if (w?.status === "failed") failed++;
+			}
 		}
+
+		const slots = Array.from({ length: poolSize }, runSlot);
+		await Promise.allSettled(slots);
 	} finally {
 		if (budgetHandler) swarmEvents.off("budget-exceeded", budgetHandler);
 	}

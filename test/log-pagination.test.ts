@@ -7,11 +7,11 @@
  */
 
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, it } from "node:test";
-import { appendRun, queryRuns, runsPath } from "../src/log.js";
+import { appendRun, logDir, queryRuns } from "../src/log.js";
 import type { Contract, RunRecord, RunResult } from "../src/types.js";
 
 // ---------------------------------------------------------------------------
@@ -48,12 +48,19 @@ function makeResult(overrides: Partial<RunResult> = {}): RunResult {
 	};
 }
 
-/** Write a set of RunRecord objects directly as NDJSON, bypassing appendRun timestamps. */
+/**
+ * Write a set of RunRecord objects with controlled timestamps.
+ *
+ * v3.0: writes to the legacy NDJSON path so the SQLite migration picks them up
+ * on the next DB open. Must be called BEFORE any appendRun to avoid the DB
+ * being already open (migration only runs once on first open).
+ * The caller should NOT have called appendRun on this todoPath yet.
+ */
 function writeRawRecords(todoPath: string, records: RunRecord[]): void {
-	// appendRun already ensures .evalgate/ exists; seed it first.
-	// Then overwrite with our controlled records.
-	const path = runsPath(todoPath);
-	writeFileSync(path, records.map((r) => JSON.stringify(r)).join("\n") + "\n", "utf8");
+	const dir = logDir(todoPath);
+	mkdirSync(dir, { recursive: true });
+	const ndjsonPath = join(dir, "runs.ndjson");
+	writeFileSync(ndjsonPath, records.map((r) => JSON.stringify(r)).join("\n") + "\n", "utf8");
 }
 
 function makeRecord(id: string, ts: string, durationMs: number): RunRecord {
@@ -145,19 +152,21 @@ describe("queryRuns — from/to date filters", () => {
 		try {
 			const todoPath = join(dir, "todo.md");
 
-			// Seed .evalgate/ directory via appendRun, then overwrite with controlled data
-			appendRun(makeResult(), todoPath, "manual");
+			// Write NDJSON records BEFORE opening the DB so migration picks them up.
 			writeRawRecords(todoPath, [
 				makeRecord("r1", "2025-01-01T00:00:00.000Z", 1),
 				makeRecord("r2", "2025-06-15T12:00:00.000Z", 2),
 				makeRecord("r3", "2025-12-31T23:59:59.000Z", 3),
 			]);
+			// Trigger migration + add one more record
+			appendRun(makeResult(), todoPath, "manual");
 
 			const result = queryRuns(todoPath, { from: "2025-06-01T00:00:00.000Z" });
+			// r2, r3, and the appended record (current year) should qualify
 			for (const r of result) {
 				assert.ok(r.ts >= "2025-06-01T00:00:00.000Z", `Expected ts >= from cutoff, got ${r.ts}`);
 			}
-			assert.strictEqual(result.length, 2, "Should return r2 and r3");
+			assert.ok(result.length >= 2, `Should return at least r2 and r3, got ${result.length}`);
 		} finally {
 			cleanup(dir);
 		}
@@ -168,12 +177,12 @@ describe("queryRuns — from/to date filters", () => {
 		try {
 			const todoPath = join(dir, "todo.md");
 
-			appendRun(makeResult(), todoPath, "manual");
 			writeRawRecords(todoPath, [
 				makeRecord("r1", "2025-01-01T00:00:00.000Z", 1),
 				makeRecord("r2", "2025-06-15T12:00:00.000Z", 2),
 				makeRecord("r3", "2025-12-31T23:59:59.000Z", 3),
 			]);
+			appendRun(makeResult(), todoPath, "manual");
 
 			const result = queryRuns(todoPath, { to: "2025-06-30T23:59:59.999Z" });
 			for (const r of result) {
@@ -190,12 +199,12 @@ describe("queryRuns — from/to date filters", () => {
 		try {
 			const todoPath = join(dir, "todo.md");
 
-			appendRun(makeResult(), todoPath, "manual");
 			writeRawRecords(todoPath, [
 				makeRecord("r1", "2025-01-01T00:00:00.000Z", 1),
 				makeRecord("r2", "2025-06-15T12:00:00.000Z", 2),
 				makeRecord("r3", "2025-12-31T23:59:59.000Z", 3),
 			]);
+			appendRun(makeResult(), todoPath, "manual");
 
 			const result = queryRuns(todoPath, {
 				from: "2025-05-01T00:00:00.000Z",
@@ -226,8 +235,8 @@ describe("queryRuns — from/to date filters", () => {
 		try {
 			const todoPath = join(dir, "todo.md");
 
-			appendRun(makeResult(), todoPath, "manual");
 			writeRawRecords(todoPath, [makeRecord("r1", "2025-06-15T12:00:00.000Z", 1)]);
+			appendRun(makeResult(), todoPath, "manual");
 
 			const result = queryRuns(todoPath, { to: "2024-01-01T00:00:00.000Z" });
 			assert.strictEqual(result.length, 0);

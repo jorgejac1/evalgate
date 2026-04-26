@@ -29,6 +29,8 @@ export interface Contract {
 	role?: "coordinator" | "worker" | "linter";
 	/** Whitelist of MCP server names this contract's worker may access (v0.6). */
 	mcpServers?: string[];
+	/** Scheduling priority — higher values run first in the work-stealing pool. Default 0. */
+	priority?: number;
 	/** Conditional retry expression — only retry if condition is true. Default: always retry on failure. */
 	retryIf?: { exitCode: { op: "!=" | "==" | ">" | "<" | ">=" | "<="; value: number } };
 }
@@ -68,13 +70,19 @@ export interface CompositeVerifier {
 	timeoutMs?: number;
 }
 
-/** LLM-judge verifier — calls Claude API to evaluate output quality (v0.8+). */
+export type LlmProvider = "anthropic" | "openai" | "ollama";
+
+/** LLM-judge verifier — calls an LLM API to evaluate output quality (v0.8+). */
 export interface LlmVerifier {
 	kind: "llm";
 	/** Prompt sent to the judge model. Should be a yes/no question. */
 	prompt: string;
-	/** Model id — defaults to claude-haiku-4-5-20251001 */
+	/** Model id. For anthropic defaults to claude-haiku-4-5-20251001, for openai defaults to gpt-4o-mini, for ollama defaults to llama3.2 */
 	model?: string;
+	/** LLM provider. Defaults to "anthropic". */
+	provider?: LlmProvider;
+	/** Base URL override — required for ollama (e.g. http://localhost:11434), optional for openai-compatible endpoints. */
+	baseUrl?: string;
 }
 
 /** Structural-diff verifier — asserts a pattern is present or absent in a file (v0.14+). */
@@ -109,13 +117,29 @@ export interface SchemaVerifier {
 	schema: string;
 }
 
+/** Inline JS predicate verifier — evaluates a JS function against worker output (v3.0+). */
+export interface CodeVerifier {
+	kind: "code";
+	/**
+	 * A JS expression that receives (output: string) and returns boolean.
+	 * Example: "out => JSON.parse(out).score >= 0.9"
+	 * Runs in node:vm restricted context with 5s timeout by default.
+	 */
+	fn: string;
+	/** File to read as the input to fn. Default: "output.txt" relative to worktree. */
+	file?: string;
+	/** Timeout in ms — defaults to 5000 */
+	timeoutMs?: number;
+}
+
 export type Verifier =
 	| ShellVerifier
 	| CompositeVerifier
 	| LlmVerifier
 	| DiffVerifier
 	| HttpVerifier
-	| SchemaVerifier;
+	| SchemaVerifier
+	| CodeVerifier;
 
 // ---------------------------------------------------------------------------
 // Trigger types (v0.3)
@@ -335,6 +359,34 @@ export type SwarmEvent =
 	| WorkerStartEvent
 	| WorkerRetryEvent
 	| BudgetExceededEvent;
+
+// ---------------------------------------------------------------------------
+// Worker runner abstraction (v3.0)
+// ---------------------------------------------------------------------------
+
+/** Options passed to a WorkerRunner.run() call. Mirrors spawnAgent's SpawnOpts. */
+export interface WorkerRunOpts {
+	cwd: string;
+	task: string;
+	logPath: string;
+	agentCmd?: string;
+	agentArgs?: string[];
+	taskContext?: string;
+	env?: Record<string, string>;
+}
+
+/**
+ * Abstracts how an agent worker is spawned.
+ * LocalRunner wraps spawnAgent (default). SSHRunner and DockerRunner are
+ * implemented in conductor-agents and passed in via SwarmOptions.runner.
+ */
+export interface WorkerRunner {
+	/**
+	 * Spawn the agent for one worker. Returns the exit code.
+	 * Return -2 to signal a timeout (same sentinel as spawnAgent).
+	 */
+	run(opts: WorkerRunOpts): Promise<number>;
+}
 
 // ---------------------------------------------------------------------------
 // MCP protocol types (v0.2)

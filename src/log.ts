@@ -1,14 +1,16 @@
 /**
- * evalgate run log — v0.4
+ * evalgate run log — v3.0
  *
- * Append-only NDJSON log at .evalgate/runs.ndjson.
- * One RunRecord per line. Crash-safe: partial writes leave prior records intact.
- * Zero runtime dependencies.
+ * SQLite-backed persistent run log at .evalgate/runs.db.
+ * Replaces the append-only NDJSON approach from v0.4.
+ * Includes one-time migration from runs.ndjson → SQLite on first open.
+ * Zero runtime dependencies beyond node:sqlite (Node 22+).
  */
 
 import { randomUUID } from "node:crypto";
-import { appendFileSync, existsSync, mkdirSync, readFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, renameSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
+import { DatabaseSync } from "node:sqlite";
 import type { RunRecord, RunResult, TriggerSource } from "./types.js";
 
 // ---------------------------------------------------------------------------
@@ -34,13 +36,126 @@ export function logDir(todoPath: string): string {
 	return join(resolve(dirname(todoPath)), ".evalgate");
 }
 
+/** Returns the .db path (previously .ndjson). Kept for backward compat. */
 export function runsPath(todoPath: string): string {
+	return join(logDir(todoPath), "runs.db");
+}
+
+function ndjsonPath(todoPath: string): string {
 	return join(logDir(todoPath), "runs.ndjson");
 }
 
 function ensureDir(todoPath: string): void {
 	const dir = logDir(todoPath);
 	if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+}
+
+// ---------------------------------------------------------------------------
+// DB connection management
+// ---------------------------------------------------------------------------
+
+/**
+ * Open (or reuse) a DatabaseSync for the given todoPath.
+ *
+ * We use a module-level map to avoid repeated schema checks on the same DB
+ * within a single process. The key is the resolved .db path.
+ *
+ * If the DB file has been deleted or moved (e.g., git worktree cleanup),
+ * the stale entry is evicted and a fresh connection is opened.
+ */
+const _dbs = new Map<string, DatabaseSync>();
+
+function openFreshDb(dbPath: string, todoPath: string): DatabaseSync {
+	const db = new DatabaseSync(dbPath);
+	db.exec(`
+		CREATE TABLE IF NOT EXISTS runs (
+			id TEXT PRIMARY KEY,
+			ts TEXT NOT NULL,
+			contractId TEXT NOT NULL,
+			contractTitle TEXT NOT NULL,
+			trigger TEXT NOT NULL,
+			passed INTEGER NOT NULL,
+			exitCode INTEGER NOT NULL,
+			durationMs INTEGER NOT NULL,
+			stdout TEXT NOT NULL,
+			stderr TEXT NOT NULL
+		);
+		CREATE INDEX IF NOT EXISTS idx_runs_contractId ON runs(contractId);
+		CREATE INDEX IF NOT EXISTS idx_runs_ts ON runs(ts);
+	`);
+
+	// One-time NDJSON → SQLite migration
+	const njPath = ndjsonPath(todoPath);
+	if (existsSync(njPath)) {
+		const insert = db.prepare("INSERT OR IGNORE INTO runs VALUES (?,?,?,?,?,?,?,?,?,?)");
+		try {
+			const raw = readFileSync(njPath, "utf8");
+			for (const line of raw.split("\n").filter(Boolean)) {
+				try {
+					const r = JSON.parse(line) as RunRecord;
+					insert.run(
+						r.id,
+						r.ts,
+						r.contractId,
+						r.contractTitle,
+						r.trigger,
+						r.passed ? 1 : 0,
+						r.exitCode,
+						r.durationMs,
+						r.stdout,
+						r.stderr,
+					);
+				} catch {
+					/* skip malformed line */
+				}
+			}
+		} catch {
+			/* file unreadable — skip migration */
+		}
+		try {
+			renameSync(njPath, `${njPath}.migrated`);
+		} catch {
+			/* best effort */
+		}
+	}
+
+	return db;
+}
+
+function getDb(todoPath: string): DatabaseSync {
+	const dbPath = runsPath(todoPath);
+	const cached = _dbs.get(dbPath);
+	if (cached) {
+		// Verify the file still exists — if not, the worktree was cleaned up.
+		// Evict the stale handle and open fresh.
+		if (!existsSync(dbPath)) {
+			_dbs.delete(dbPath);
+		} else {
+			return cached;
+		}
+	}
+
+	ensureDir(todoPath);
+	const db = openFreshDb(dbPath, todoPath);
+	_dbs.set(dbPath, db);
+	return db;
+}
+
+// ---------------------------------------------------------------------------
+// Query options (same interface as before)
+// ---------------------------------------------------------------------------
+
+export interface QueryOptions {
+	contractId?: string;
+	passed?: boolean;
+	trigger?: TriggerSource;
+	limit?: number;
+	/** Skip the first N results after filtering (for pagination). */
+	offset?: number;
+	/** ISO 8601 date — include only records at or after this timestamp. */
+	from?: string;
+	/** ISO 8601 date — include only records at or before this timestamp. */
+	to?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -65,8 +180,19 @@ export function appendRun(
 		stderr: result.stderr,
 	};
 
-	ensureDir(todoPath);
-	appendFileSync(runsPath(todoPath), `${JSON.stringify(record)}\n`, "utf8");
+	const db = getDb(todoPath);
+	db.prepare("INSERT INTO runs VALUES (?,?,?,?,?,?,?,?,?,?)").run(
+		record.id,
+		record.ts,
+		record.contractId,
+		record.contractTitle,
+		record.trigger,
+		record.passed ? 1 : 0,
+		record.exitCode,
+		record.durationMs,
+		record.stdout,
+		record.stderr,
+	);
 
 	// Notify in-process listeners (SSE server, dash)
 	for (const fn of _runListeners) {
@@ -84,65 +210,73 @@ export function appendRun(
 // Read + filter
 // ---------------------------------------------------------------------------
 
-export interface QueryOptions {
-	contractId?: string;
-	passed?: boolean;
-	trigger?: TriggerSource;
-	limit?: number;
-	/** Skip the first N results after filtering (for pagination). */
-	offset?: number;
-	/** ISO 8601 date — include only records at or after this timestamp. */
-	from?: string;
-	/** ISO 8601 date — include only records at or before this timestamp. */
-	to?: string;
-}
+type DbRow = {
+	id: string;
+	ts: string;
+	contractId: string;
+	contractTitle: string;
+	trigger: string;
+	passed: number;
+	exitCode: number;
+	durationMs: number;
+	stdout: string;
+	stderr: string;
+};
 
 export function queryRuns(todoPath: string, opts: QueryOptions = {}): RunRecord[] {
-	const path = runsPath(todoPath);
-	if (!existsSync(path)) return [];
+	const dbPath = runsPath(todoPath);
+	// If neither .db nor legacy .ndjson exists, there are no records.
+	// Otherwise call getDb() — it creates the DB and migrates NDJSON on first open.
+	if (!existsSync(dbPath) && !existsSync(ndjsonPath(todoPath))) return [];
 
-	const raw = readFileSync(path, "utf8");
-	const lines = raw.split("\n").filter(Boolean);
+	const db = getDb(todoPath);
 
-	const records: RunRecord[] = [];
-	for (const line of lines) {
-		try {
-			records.push(JSON.parse(line) as RunRecord);
-		} catch {
-			// Skip malformed lines — append-only means this line may be a partial write
-		}
-	}
+	const conditions: string[] = [];
+	const params: (string | number)[] = [];
 
-	let filtered = records;
 	if (opts.contractId !== undefined) {
-		filtered = filtered.filter((r) => r.contractId === opts.contractId);
+		conditions.push("contractId = ?");
+		params.push(opts.contractId);
 	}
 	if (opts.passed !== undefined) {
-		filtered = filtered.filter((r) => r.passed === opts.passed);
+		conditions.push("passed = ?");
+		params.push(opts.passed ? 1 : 0);
 	}
 	if (opts.trigger !== undefined) {
-		filtered = filtered.filter((r) => r.trigger === opts.trigger);
+		conditions.push("trigger = ?");
+		params.push(opts.trigger);
 	}
 	if (opts.from !== undefined) {
-		const from = opts.from;
-		filtered = filtered.filter((r) => r.ts >= from);
+		conditions.push("ts >= ?");
+		params.push(opts.from);
 	}
 	if (opts.to !== undefined) {
-		const to = opts.to;
-		filtered = filtered.filter((r) => r.ts <= to);
+		conditions.push("ts <= ?");
+		params.push(opts.to);
 	}
 
-	// Most recent first
-	filtered.reverse();
+	const where = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
+	const limit = opts.limit !== undefined && opts.limit > 0 ? opts.limit : -1;
+	const offset = opts.offset !== undefined && opts.offset > 0 ? opts.offset : 0;
 
-	if (opts.offset !== undefined && opts.offset > 0) {
-		filtered = filtered.slice(opts.offset);
-	}
-	if (opts.limit !== undefined && opts.limit > 0) {
-		filtered = filtered.slice(0, opts.limit);
-	}
+	const limitClause =
+		limit > 0 ? `LIMIT ${limit} OFFSET ${offset}` : offset > 0 ? `LIMIT -1 OFFSET ${offset}` : "";
 
-	return filtered;
+	const sql = `SELECT * FROM runs ${where} ORDER BY ts DESC ${limitClause}`.trim();
+	const rows = db.prepare(sql).all(...params) as DbRow[];
+
+	return rows.map((row) => ({
+		id: row.id,
+		ts: row.ts,
+		contractId: row.contractId,
+		contractTitle: row.contractTitle,
+		trigger: row.trigger as TriggerSource,
+		passed: row.passed === 1,
+		exitCode: row.exitCode,
+		durationMs: row.durationMs,
+		stdout: row.stdout,
+		stderr: row.stderr,
+	}));
 }
 
 export function getLastFailure(todoPath: string, contractId: string): RunRecord | null {

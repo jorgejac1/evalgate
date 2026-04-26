@@ -43,7 +43,7 @@
   "author": "Jorge Jacome",
   "license": "MIT",
   "engines": {
-    "node": ">=18"
+    "node": ">=22"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.4.12",

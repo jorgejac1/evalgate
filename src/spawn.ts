@@ -72,7 +72,7 @@ export async function spawnAgent(opts: SpawnOpts): Promise<number> {
 	const args =
 		opts.agentArgs && opts.agentArgs.length > 0
 			? opts.agentArgs.map((a) => a.replaceAll("{task}", fullTask))
-			: ["--print", fullTask];
+			: ["--print", "--output-format", "json", fullTask];
 
 	mkdirSync(dirname(logPath), { recursive: true });
 	const logStream = createWriteStream(logPath, { flags: "a" });

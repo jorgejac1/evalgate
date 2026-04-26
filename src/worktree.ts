@@ -38,7 +38,9 @@ export function getRepoRoot(cwd: string): string {
  * The branch is created from HEAD of the repo at `repoRoot`.
  */
 export function createWorktree(repoRoot: string, branch: string, worktreePath: string): void {
-	git(`worktree add "${worktreePath}" -b "${branch}"`, repoRoot);
+	// Use -B (force-reset) so that a stale branch from a paused/retried run doesn't
+	// cause worktree creation to fail with "branch already exists".
+	git(`worktree add "${worktreePath}" -B "${branch}"`, repoRoot);
 }
 
 /**
