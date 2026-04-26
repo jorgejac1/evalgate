@@ -120,6 +120,17 @@ export interface SwarmOptions {
 	 * Provide SSHRunner or DockerRunner from conductor-agents for remote execution.
 	 */
 	runner?: WorkerRunner;
+	/**
+	 * Optional hook for extracting token usage from a worker's log output.
+	 * Called with the full log content and stderr after the worker exits.
+	 * Return { inputTokens, outputTokens, model? } to record usage, or null to skip.
+	 * When provided, overrides the built-in Claude --output-format json parser.
+	 * Exceptions thrown here are caught — on throw, tokens are recorded as 0.
+	 */
+	parseUsage?: (
+		logContent: string,
+		stderr: string,
+	) => { inputTokens: number; outputTokens: number; model?: string } | null;
 }
 
 export interface SwarmResult {
@@ -219,6 +230,24 @@ function emitTaskComplete(
 // Single worker lifecycle
 // ---------------------------------------------------------------------------
 
+function defaultClauseParseUsage(
+	logContent: string,
+): { inputTokens: number; outputTokens: number } | null {
+	for (const line of logContent.split("\n").reverse()) {
+		if (!line.trim().startsWith("{")) continue;
+		try {
+			const obj = JSON.parse(line) as Record<string, unknown>;
+			if (obj.type === "result") {
+				const usage = obj.usage as Record<string, number> | undefined;
+				const input = usage?.input_tokens ?? 0;
+				const output = usage?.output_tokens ?? 0;
+				return { inputTokens: input, outputTokens: output };
+			}
+		} catch {}
+	}
+	return null;
+}
+
 async function runWorker(
 	worker: WorkerState,
 	contract: Contract,
@@ -292,31 +321,34 @@ async function runWorker(
 		env: extraEnv,
 	});
 
-	// Extract token usage from the log file. When using the default claude args
-	// (--output-format json), the log contains a single {"type":"result",...} line
-	// with usage counts. Best-effort — silently skipped for custom agents that
-	// don't emit this format.
+	// Extract token usage from the log file. Calls the caller-supplied parseUsage
+	// hook if provided; otherwise falls back to the built-in Claude JSON parser.
 	try {
 		const logContent = readFileSync(worker.logPath, "utf8");
-		for (const line of logContent.split("\n").reverse()) {
-			if (!line.trim().startsWith("{")) continue;
-			const obj = JSON.parse(line) as Record<string, unknown>;
-			if (obj["type"] === "result") {
-				const usage = obj["usage"] as Record<string, number> | undefined;
-				const input = usage?.["input_tokens"] ?? 0;
-				const output = usage?.["output_tokens"] ?? 0;
-				if (input > 0 || output > 0) {
-					reportTokenUsage(todoPath, worker.contractId, input + output, undefined, {
-						inputTokens: input,
-						outputTokens: output,
-						workerId: worker.id,
-					});
-				}
-				break;
-			}
+		const parsed = opts.parseUsage
+			? (() => {
+					try {
+						return opts.parseUsage(logContent, "");
+					} catch {
+						return null;
+					}
+				})()
+			: defaultClauseParseUsage(logContent);
+		if (parsed && (parsed.inputTokens > 0 || parsed.outputTokens > 0)) {
+			reportTokenUsage(
+				todoPath,
+				worker.contractId,
+				parsed.inputTokens + parsed.outputTokens,
+				undefined,
+				{
+					inputTokens: parsed.inputTokens,
+					outputTokens: parsed.outputTokens,
+					workerId: worker.id,
+				},
+			);
 		}
 	} catch {
-		// Log not available or non-JSON agent — skip token tracking.
+		// Log not available — skip token tracking.
 	}
 
 	// Exit code -2 is the timeout sentinel set by spawnAgent when agentTimeoutMs
